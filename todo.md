@@ -37,35 +37,30 @@ yaml
 
 Copy
 services:
-db:
-image: postgres:15-alpine
-restart: unless-stopped
-env_file: .env
-volumes: - pgdata:/var/lib/postgresql/data
-ports: ["127.0.0.1:5432:5432"]
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    expose: ["8000"]
 
-backend:
-build: ./backend
-restart: unless-stopped
-env_file: .env
-depends_on: [db]
-expose: ["8000"]
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    expose: ["3000"]
 
-frontend:
-build: ./frontend
-restart: unless-stopped
-expose: ["3000"]
-
-nginx:
-image: nginx:alpine
-restart: unless-stopped
-ports: ["80:80","443:443"]
-volumes: - ./nginx:/etc/nginx/conf.d - /etc/letsencrypt:/etc/letsencrypt:ro
-depends_on: [frontend,backend]
-
-volumes:
-pgdata:
-[ ] Add .env to .gitignore, template .env.example. 3. Nginx Reverse-Proxy Config [S1]
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - frontend
+      - backend
+[x] Add .env to .gitignore, template .env.example. 3. Nginx Reverse-Proxy Config [S1]
 
 nginx/site.conf:
 
@@ -98,7 +93,7 @@ server_name api.familyfinances.example.com;
     }
 
 }
-[ ] Add HSTS, CSP, X-Frame-Options headers via snippets.
+[x] Add HSTS, CSP, X-Frame-Options headers via snippets.
 [ ] Test with curl -I https://api.familyfinances.example.com/docs. 4. Frontend Dockerfile [S1]
 
 frontend/Dockerfile:
@@ -123,7 +118,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 EXPOSE 3000
 CMD ["node","server.js"]
-[ ] Enable Next.js output: "standalone" in next.config.js. 5. Backend Dockerfile [S1]
+[x] Enable Next.js output: "standalone" in next.config.js. 5. Backend Dockerfile [S1]
 
 backend/Dockerfile:
 dockerfile
@@ -155,11 +150,13 @@ docker compose down && docker compose up -d 8. Environment Variables [S2]
 .env:
 
 Copy
+POSTGRES_HOST=your_postgres_host
+POSTGRES_PORT=5432
 POSTGRES_USER=finuser
-POSTGRES_PASSWORD=<strong-pw>
+POSTGRES_PASSWORD=your_strong_password
 POSTGRES_DB=finances
-DATABASE_URL=postgresql+asyncpg://finuser:<strong-pw>@db:5432/finances
-JWT_SECRET=<super-secret>
+DATABASE_URL=postgresql+asyncpg://finuser:your_strong_password@your_postgres_host:5432/finances
+JWT_SECRET=your_super_secret_jwt_key
 COOKIE_DOMAIN=.familyfinances.example.com
 NEXT_PUBLIC_API_URL=https://api.familyfinances.example.com 9. Security Hardening [S3]
 

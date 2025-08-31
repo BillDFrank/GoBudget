@@ -24,6 +24,20 @@ Non-Functional Requirements
 • Security: CSP, HSTS, SRI, OWASP Top-10 compliance, Snyk/Dependabot scanning.
 • Scalability: 10 k active users, 1 M transactions, auto-scaling to 3×.
 • Responsive: Mobile-first breakpoints 360 px, 744 px, 1024 px, 1440 px.
+Current Infrastructure Setup
+
+The project uses a Docker Compose stack deployed on an Ubuntu 22.04 LTS VPS with the following services:
+
+- Backend: FastAPI application built with Python 3.11-slim, exposing port 8000
+- Frontend: Next.js application built with Node.js 20, exposing port 3000
+- Nginx: Reverse-proxy with SSL/TLS, routing to frontend and backend, including security headers
+
+Database: External PostgreSQL instance (not included in Docker Compose)
+
+Environment variables are managed via .env file, with .env.example as template.
+
+Nginx configuration includes SSL certificates from Let's Encrypt, HSTS, CSP, and X-Frame-Options headers.
+
 User Stories
 • As a user, I want to input my family’s financial transactions in < 30 s.
 • As a user, I want to see my financial health at a glance on any device.
