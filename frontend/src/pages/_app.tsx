@@ -2,7 +2,17 @@ import '../styles/globals.css'
 import type { AppProps } from 'next/app'
 import { useEffect } from 'react'
 import { useRouter } from 'next/router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
 
 function AuthWrapper({ children }: { children: React.ReactNode }) {
   const { checkAuth, isAuthenticated } = useAuthStore()
@@ -29,8 +39,10 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
-    <AuthWrapper>
-      <Component {...pageProps} />
-    </AuthWrapper>
+    <QueryClientProvider client={queryClient}>
+      <AuthWrapper>
+        <Component {...pageProps} />
+      </AuthWrapper>
+    </QueryClientProvider>
   )
 }

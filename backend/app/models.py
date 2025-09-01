@@ -14,7 +14,7 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date)
-    type = Column(String)  # income, expense, savings, investment
+    type = Column(String)  
     person = Column(String)
     category = Column(String)
     description = Column(String)

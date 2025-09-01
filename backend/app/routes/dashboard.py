@@ -7,6 +7,57 @@ from ..models import User, Transaction
 
 router = APIRouter()
 
+@router.get("/income-overview/")
+def get_income_overview(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Calculate total income
+    total_income = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'income'
+    ).scalar() or 0
+
+    # Calculate monthly average (assuming we have data for multiple months)
+    monthly_count = db.query(func.count(func.distinct(func.date_trunc('month', Transaction.date)))).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'income'
+    ).scalar() or 1
+
+    average_income = total_income / monthly_count if monthly_count > 0 else 0
+
+    # Monthly trend
+    monthly_trend = db.query(
+        func.date_trunc('month', Transaction.date).label('month'),
+        func.sum(Transaction.amount).label('amount')
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'income'
+    ).group_by(func.date_trunc('month', Transaction.date)).order_by(func.date_trunc('month', Transaction.date)).all()
+
+    # Category breakdown
+    category_totals = db.query(
+        Transaction.category,
+        func.sum(Transaction.amount).label('amount')
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'income'
+    ).group_by(Transaction.category).all()
+
+    # Calculate percentages
+    category_breakdown = []
+    for category, amount in category_totals:
+        percentage = (amount / total_income * 100) if total_income > 0 else 0
+        category_breakdown.append({
+            'category': category,
+            'amount': float(amount),
+            'percentage': percentage
+        })
+
+    return {
+        'total': float(total_income),
+        'average': float(average_income),
+        'monthly_trend': [{'month': str(month), 'amount': float(amount)} for month, amount in monthly_trend],
+        'category_breakdown': category_breakdown
+    }
+
 @router.get("/")
 def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # KPIs
