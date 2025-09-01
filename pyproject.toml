@@ -1,7 +1,19 @@
 [project]
 name = "gobudget"
 version = "0.1.0"
-description = "Add your description here"
+description = "Family Financial App - Track and manage finances with intuitive dashboards"
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = []
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy",
+    "asyncpg",
+    "pydantic",
+    "alembic",
+    "python-jose[cryptography]",
+    "passlib[bcrypt]",
+    "python-multipart",
+    "psycopg2-binary",
+    "python-dotenv"
+]

@@ -3,22 +3,11 @@ services:
     build: ./backend
     restart: unless-stopped
     env_file: .env
-    expose: ["8000"]
+    ports:
+      - "8000:8000"
 
   frontend:
     build: ./frontend
     restart: unless-stopped
-    expose: ["3000"]
-
-  nginx:
-    image: nginx:alpine
-    restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx:/etc/nginx/conf.d
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      - frontend
-      - backend
+      - "3000:3000"
