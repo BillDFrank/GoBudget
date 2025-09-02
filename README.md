@@ -123,11 +123,3 @@ See `todo.md` for detailed deployment steps.
 2. Create a feature branch
 3. Make changes with conventional commits
 4. Submit a pull request
-
-## License
-
-[Add license information]
-
-## Contact
-
-[Add contact information]
