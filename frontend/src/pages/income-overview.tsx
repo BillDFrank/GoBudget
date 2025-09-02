@@ -205,3 +205,10 @@ export default function IncomeOverview() {
     </div>
   );
 }
+
+// Disable static generation to avoid router issues
+export async function getServerSideProps() {
+  return {
+    props: {},
+  };
+}
