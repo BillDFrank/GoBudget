@@ -17,6 +17,8 @@ services:
     restart: unless-stopped
     networks:
       - gobudget-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     build: ./frontend
