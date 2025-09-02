@@ -4,7 +4,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8001:8000"  # Use port 8001 (external) -> 8000 (internal)
+      - "8001:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - JWT_SECRET=${JWT_SECRET}
@@ -17,11 +17,14 @@ services:
     restart: unless-stopped
     networks:
       - gobudget-network
+      - portfolio_default
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     build: ./frontend
     ports:
-      - "3001:3000"  # Use port 3001 (external) -> 3000 (internal)
+      - "3001:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
     restart: unless-stopped
@@ -31,3 +34,5 @@ services:
 networks:
   gobudget-network:
     driver: bridge
+  portfolio_default:
+    external: true
