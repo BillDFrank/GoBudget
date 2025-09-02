@@ -1,219 +1,122 @@
-Project Context (unchanged except infra)
+# Todo List for Family Financial App
 
-• Frontend: Next.js (static export or Node server)
-• Backend: FastAPI + SQLAlchemy + PostgreSQL
-• Auth: JWT access & refresh tokens in secure, same-site, HttpOnly cookies
-• OS: Ubuntu 22.04 LTS (root access)
-• Core tools: Docker + Docker-Compose, Nginx (reverse-proxy + TLS), systemd services
-• Backups: nightly pg_dump + rclone to any S3-compatible storage (free tier)
-Folder Layout (monorepo on VPS)
+This document outlines all features needed to run the website, based on project.md and additional requisites. Each item is broken into small, actionable steps. Use [ ] for not done, [x] for done.
 
-Copy
-/home/ubuntu/family-finances/
-├── frontend/ # Next.js source
-├── backend/ # FastAPI source
-├── docker-compose.yml
-├── .env # all secrets
-├── nginx/ # site.conf & snippets
-├── scripts/ # backup.sh, renew-tls.sh
-└── logs/
-Global Todo List
+## Core Infrastructure Setup
+- [X] Set up PostgreSQL database (external instance)
+- [X] Configure environment variables in .env file
+- [ ] Build and run Docker Compose services (backend, frontend, nginx)
+- [ ] Set up SSL/TLS with Let's Encrypt for nginx
+- [ ] Configure security headers in nginx (CSP, HSTS, etc.)
 
-Legend: [S1] Sprint 1, etc.
-All tasks are incremental; only infra & commands changed. 0. VPS Provisioning [S1]
+## Backend Development (FastAPI)
+- [x] Create FastAPI application structure (main.py, routers, models)
+- [x] Implement JWT authentication with refresh tokens and HTTP-only cookies
+- [x] Set up SQLAlchemy models for users, transactions, categories
+- [ ] Create database schema with Alembic migrations
+- [x] Implement CRUD endpoints for transactions (/transactions)
+- [x] Implement dashboard API (/dashboard) with KPI calculations
+- [x] Implement income overview API (/income-overview) with aggregations
+- [ ] Implement expenses overview API (/expenses-overview) with aggregations
+- [ ] Implement savings & investments API (/savings-investments)
+- [ ] Add rate limiting and security hardening
+- [ ] Write Pytest unit tests (90% coverage)
+- [x] Set up Pydantic models for request/response validation
 
-[ ] Spin up VPS (1 vCPU, 1 GB RAM, 25 GB SSD).
-[ ] Add non-root user ubuntu, enable SSH key login, disable password.
-[ ] Update OS: apt update && apt upgrade -y.
-[ ] Install: docker, docker-compose-plugin, nginx, certbot, git, make.
+## Frontend Development (Next.js)
+- [x] Scaffold Next.js project with TypeScript and Tailwind CSS
+- [x] Implement global layout and navigation
+- [ ] Set up design system tokens in tailwind.config.ts (8-point grid, colors, typography)
+- [x] Create authentication pages (login, register)
+- [x] Build data input form with React-Hook-Form (date picker, type toggle, validation)
+- [ ] Implement dashboard page with KPI cards and Recharts (column, pie, line charts)
+- [ ] Create income overview page with multi-line chart and filters
+- [ ] Create expenses overview page with pie + stacked bar charts
+- [ ] Create savings & investments page with dual-axis line chart
+- [ ] Add month selector with calendar popover
+- [ ] Implement dark/light mode toggle
+- [ ] Add loading skeletons and micro-interactions (Framer-Motion)
+- [x] Integrate React-Query for API caching
+- [x] Set up Zustand for state management
+- [ ] Ensure responsive design (mobile-first breakpoints)
+- [ ] Implement accessibility features (WCAG 2.1 AA, keyboard navigation, screen readers)
+- [ ] Add real-time validation and auto-save drafts
+- [ ] Implement error handling and toast notifications
 
-1. DNS & TLS [S1]
+## Authentication & Security
+- [x] Implement user registration and login endpoints
+- [x] Set up JWT token generation and validation
+- [ ] Configure secure HTTP-only cookies for tokens
+- [x] Add password hashing with bcrypt
+- [x] Implement logout and token refresh mechanisms
+- [ ] Add OWASP Top-10 security measures
+- [ ] Set up Snyk/Dependabot for dependency scanning
 
-[ ] Point familyfinances.example.com → VPS IPv4.
-[ ] sudo certbot --nginx -d familyfinances.example.com -d api.familyfinances.example.com (auto-renew). 2. Docker Compose Stack [S1]
+## Database & Data Management
+- [x] Design database schema for users, transactions, categories
+- [ ] Set up Alembic for database migrations
+- [ ] Implement data seeding for initial categories
+- [ ] Add data validation and constraints
+- [ ] Set up database backups and recovery
 
-/home/ubuntu/family-finances/docker-compose.yml:
-yaml
+## Deployment & DevOps
+- [ ] Set up GitHub Actions CI/CD pipeline
+- [ ] Configure Docker multi-stage builds
+- [ ] Deploy to AWS ECS Fargate with RDS PostgreSQL
+- [ ] Set up CloudWatch monitoring and alerts
+- [ ] Configure CloudFront CDN
+- [ ] Implement auto-scaling for 10k users
+- [ ] Set up HTTPS auto-renewal
 
-Copy
-services:
-  backend:
-    build: ./backend
-    restart: unless-stopped
-    env_file: .env
-    expose: ["8000"]
+## QA & Testing
+- [ ] Write Cypress E2E tests for critical flows
+- [ ] Write Playwright E2E tests
+- [ ] Perform accessibility audit with Axe-core
+- [ ] Set up Lighthouse CI for performance monitoring
+- [ ] Implement visual regression testing with Percy
+- [ ] Test responsive design across breakpoints
+- [ ] Conduct load testing for 10k users
 
-  frontend:
-    build: ./frontend
-    restart: unless-stopped
-    expose: ["3000"]
+## Additional Requisite: Receipt Upload and Processing
+- [ ] Create database tables for receipts (market, branch, date, total, user_id)
+- [ ] Create database table for receipt products (product, type, quantity, price, discount, discount2, receipt_id)
+- [ ] Implement API endpoint for receipt upload (POST /receipts/upload)
+- [ ] Add file upload handling with python-multipart
+- [ ] Integrate external API for PDF text extraction
+- [ ] Parse extracted data into structured format (Market, Branch, Date, Total, Products)
+- [ ] Validate and store receipt data in database
+- [ ] Associate receipts with authenticated user
+- [ ] Implement error handling for invalid PDFs or API failures
+- [ ] Add receipt listing endpoint (GET /receipts)
+- [ ] Create frontend page for receipt upload with file input
+- [ ] Display upload progress and success/error messages
+- [ ] Add receipt details view with extracted information
 
-  nginx:
-    image: nginx:alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx:/etc/nginx/conf.d
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      - frontend
-      - backend
-[x] Add .env to .gitignore, template .env.example. 3. Nginx Reverse-Proxy Config [S1]
+## Additional Requisite: Spending Overview and Receipt Details
+- [ ] Create API endpoint for spending summary (GET /spending/summary) with week/month filters
+- [ ] Implement aggregation queries for spending by period
+- [ ] Create API endpoint for individual receipt details (GET /receipts/{id})
+- [ ] Ensure receipts are user-specific (filter by user_id)
+- [ ] Prevent unauthorized access to other users' receipts
+- [ ] Create frontend page for spending overview with charts (weekly/monthly spending)
+- [ ] Add filters for date range and period type
+- [ ] Create frontend page for receipt details with full information
+- [ ] Implement navigation between spending overview and receipt details
+- [ ] Add export functionality for spending reports (CSV/PDF)
+- [ ] Ensure responsive design for new pages
 
-nginx/site.conf:
+## Performance & Optimization
+- [ ] Optimize bundle size (< 200 kB for frontend)
+- [ ] Implement caching strategies (React-Query, CDN)
+- [ ] Add lazy loading for components and routes
+- [ ] Optimize database queries with indexing
+- [ ] Implement pagination for large data sets
+- [ ] Monitor and optimize API response times (< 200 ms p95)
 
-Copy
-server {
-listen 443 ssl http2;
-server_name familyfinances.example.com;
-
-    ssl_certificate     /etc/letsencrypt/live/familyfinances.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/familyfinances.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://frontend:3000;
-        proxy_set_header Host $host;
-    }
-
-}
-
-server {
-listen 443 ssl http2;
-server_name api.familyfinances.example.com;
-
-    ssl_certificate     /etc/letsencrypt/live/familyfinances.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/familyfinances.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://backend:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-}
-[x] Add HSTS, CSP, X-Frame-Options headers via snippets.
-[ ] Test with curl -I https://api.familyfinances.example.com/docs. 4. Frontend Dockerfile [S1]
-
-frontend/Dockerfile:
-dockerfile
-
-Copy
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package\*.json ./
-RUN npm ci --only=production
-
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY . .
-COPY --from=deps /app/node_modules ./node_modules
-RUN npm run build
-
-FROM node:20-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-EXPOSE 3000
-CMD ["node","server.js"]
-[x] Enable Next.js output: "standalone" in next.config.js. 5. Backend Dockerfile [S1]
-
-backend/Dockerfile:
-dockerfile
-
-Copy
-FROM python:3.11-slim
-WORKDIR /code
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY ./app ./app
-CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"] 6. PostgreSQL Setup [S1]
-
-[ ] docker compose up -d db
-[ ] Run alembic upgrade head inside backend container.
-[ ] Seed demo data: docker compose exec backend python scripts/seed.py. 7. CI/CD (GitHub Actions → VPS) [S2]
-
-[ ] Add self-hosted runner on VPS:
-bash
-
-Copy
-mkdir actions-runner && cd actions-runner
-curl -s https://api.github.com/repos/<org>/family-finances/actions/runners/registration-token... | ./config.sh --url ... --token ...
-sudo ./svc.sh install && sudo ./svc.sh start
-[ ] Workflow .github/workflows/deploy.yml:
-lint & test
-docker build images
-docker compose down && docker compose up -d 8. Environment Variables [S2]
-
-.env:
-
-Copy
-POSTGRES_HOST=your_postgres_host
-POSTGRES_PORT=5432
-POSTGRES_USER=finuser
-POSTGRES_PASSWORD=your_strong_password
-POSTGRES_DB=finances
-DATABASE_URL=postgresql+asyncpg://finuser:your_strong_password@your_postgres_host:5432/finances
-JWT_SECRET=your_super_secret_jwt_key
-COOKIE_DOMAIN=.familyfinances.example.com
-NEXT_PUBLIC_API_URL=https://api.familyfinances.example.com 9. Security Hardening [S3]
-
-[ ] Enable UFW: allow 22, 80, 443 only.
-[ ] Fail2ban on SSH & nginx.
-[ ] Run containers as non-root (use USER 1001).
-[ ] nightly apt upgrade via unattended-upgrades.
-[ ] Set up Snyk/Dependabot scanning. 10. Backup Strategy [S3]
-
-[ ] scripts/backup.sh:
-bash
-
-Copy
-#!/bin/bash
-docker compose exec -T db pg_dump -U finuser finances | gzip > /home/ubuntu/backups/$(date +%F).sql.gz
-rclone copy /home/ubuntu/backups remote:s3-bucket/finances
-[ ] Add cron: 0 3 \* \* \* /home/ubuntu/scripts/backup.sh. 11. Performance & Scaling [S3]
-
-[ ] Enable nginx gzip & brotli.
-[ ] Set worker_processes auto; in nginx.conf.
-[ ] Add Redis cache container later if needed (commented in compose).
-[ ] Use systemd limits to cap container RAM/CPU. 12. Monitoring & Logs [S4]
-
-[ ] docker compose logs -f → journald.
-[ ] Install netdata (1-click free) or cadvisor + prometheus + grafana (optional).
-[ ] UptimeRobot free ping every 5 min. 13. Final Release Checklist [S4]
-
-[ ] All Cypress E2E pass on production URL.
-[ ] Lighthouse ≥ 95 (performance, a11y, best-practices).
-[ ] curl -I shows security headers.
-[ ] Backup script executed successfully.
-[ ] Tag v1.0.0, update changelog.
-Sprint Plan (unchanged scope, updated infra tasks)
-
-Table
-
-Copy
-Sprint Key Infra Tasks
-S1 VPS setup, DNS, Docker compose, TLS, local seed.
-S2 GitHub self-hosted runner, CI/CD pipeline, auth flow live.
-S3 Security hardening, backups, performance tuning.
-S4 Monitoring, load test 50 VUs, release v1.0.0.
-Commands Cheat-Sheet
-
-Copy
-
-# Full deploy
-
-git pull
-docker compose build --no-cache
-docker compose up -d
-docker image prune -f
-
-# Tail logs
-
-docker compose logs -f backend
-
-# Manual DB migration
-
-docker compose exec backend alembic upgrade head
+## Final Touches
+- [ ] Implement empty states, loading states, and error states
+- [ ] Add micro-interactions and animations
+- [ ] Conduct final accessibility audit
+- [ ] Perform cross-browser testing
+- [ ] Set up production monitoring and logging
+- [ ] Create user documentation and onboarding
