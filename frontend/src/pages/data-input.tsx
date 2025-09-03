@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useForm } from 'react-hook-form';
 import { useAuthStore } from '../store/auth';
@@ -25,6 +25,17 @@ export default function DataInput() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (isClient && !user) {
+      router.push('/login');
+    }
+  }, [isClient, user, router]);
 
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<TransactionFormData>({
     defaultValues: {
@@ -64,9 +75,16 @@ export default function DataInput() {
     }
   };
 
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
   if (!user) {
-    router.push('/login');
-    return null;
+    return null; // Will redirect via useEffect
   }
 
   return (

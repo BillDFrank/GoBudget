@@ -1,5 +1,6 @@
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/auth';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
@@ -22,6 +23,17 @@ interface DashboardData {
 export default function Dashboard() {
   const { user, logout } = useAuthStore();
   const router = useRouter();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (isClient && !user) {
+      router.push('/login');
+    }
+  }, [isClient, user, router]);
 
   const { data: dashboardData, isLoading, error } = useQuery<DashboardData>({
     queryKey: ['dashboard'],
@@ -37,9 +49,16 @@ export default function Dashboard() {
     router.push('/');
   };
 
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
   if (!user) {
-    router.push('/login');
-    return null;
+    return null; // Will redirect via useEffect
   }
 
   const formatCurrency = (amount: number) => {
@@ -63,6 +82,12 @@ export default function Dashboard() {
                 className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700"
               >
                 Add Transaction
+              </Link>
+              <Link
+                href="/receipt-upload"
+                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+              >
+                Upload Receipt
               </Link>
               <button
                 onClick={handleLogout}
@@ -235,12 +260,18 @@ export default function Dashboard() {
             {/* Quick Actions */}
             <div className="bg-white shadow rounded-lg p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                 <Link
                   href="/data-input"
                   className="flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
                 >
                   Add Transaction
+                </Link>
+                <Link
+                  href="/receipt-upload"
+                  className="flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                >
+                  Upload Receipt
                 </Link>
                 <Link
                   href="/income-overview"
@@ -253,6 +284,12 @@ export default function Dashboard() {
                   className="flex items-center justify-center px-4 py-3 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
                 >
                   Expenses Overview
+                </Link>
+                <Link
+                  href="/spending-overview"
+                  className="flex items-center justify-center px-4 py-3 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Spending Overview
                 </Link>
                 <Link
                   href="/savings-investments"

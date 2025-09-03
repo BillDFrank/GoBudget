@@ -1,4 +1,5 @@
 import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '../store/auth';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +15,17 @@ interface IncomeData {
 export default function IncomeOverview() {
   const { user } = useAuthStore();
   const router = useRouter();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (isClient && !user) {
+      router.push('/login');
+    }
+  }, [isClient, user, router]);
 
   const { data: incomeData, isLoading, error } = useQuery<IncomeData>({
     queryKey: ['income-overview'],
@@ -24,9 +36,16 @@ export default function IncomeOverview() {
     enabled: !!user,
   });
 
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
   if (!user) {
-    router.push('/login');
-    return null;
+    return null; // Will redirect via useEffect
   }
 
   const formatCurrency = (amount: number) => {

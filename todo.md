@@ -5,15 +5,15 @@ This document outlines all features needed to run the website, based on project.
 ## Core Infrastructure Setup
 - [X] Set up PostgreSQL database (external instance)
 - [X] Configure environment variables in .env file
-- [ ] Build and run Docker Compose services (backend, frontend, nginx)
-- [ ] Set up SSL/TLS with Let's Encrypt for nginx
-- [ ] Configure security headers in nginx (CSP, HSTS, etc.)
+- [X] Build and run Docker Compose services (backend, frontend, nginx)
+- [X] Set up SSL/TLS with Let's Encrypt for nginx
+- [X] Configure security headers in nginx (CSP, HSTS, etc.)
 
 ## Backend Development (FastAPI)
 - [x] Create FastAPI application structure (main.py, routers, models)
 - [x] Implement JWT authentication with refresh tokens and HTTP-only cookies
 - [x] Set up SQLAlchemy models for users, transactions, categories
-- [ ] Create database schema with Alembic migrations
+- [X] Create database schema with Alembic migrations
 - [x] Implement CRUD endpoints for transactions (/transactions)
 - [x] Implement dashboard API (/dashboard) with KPI calculations
 - [x] Implement income overview API (/income-overview) with aggregations
@@ -78,32 +78,32 @@ This document outlines all features needed to run the website, based on project.
 - [ ] Conduct load testing for 10k users
 
 ## Additional Requisite: Receipt Upload and Processing
-- [ ] Create database tables for receipts (market, branch, date, total, user_id)
-- [ ] Create database table for receipt products (product, type, quantity, price, discount, discount2, receipt_id)
-- [ ] Implement API endpoint for receipt upload (POST /receipts/upload)
-- [ ] Add file upload handling with python-multipart
-- [ ] Integrate external API for PDF text extraction
-- [ ] Parse extracted data into structured format (Market, Branch, Date, Total, Products)
-- [ ] Validate and store receipt data in database
-- [ ] Associate receipts with authenticated user
-- [ ] Implement error handling for invalid PDFs or API failures
-- [ ] Add receipt listing endpoint (GET /receipts)
-- [ ] Create frontend page for receipt upload with file input
-- [ ] Display upload progress and success/error messages
-- [ ] Add receipt details view with extracted information
+- [x] Create database tables for receipts (market, branch, date, total, user_id)
+- [x] Create database table for receipt products (product, type, quantity, price, discount, discount2, receipt_id)
+- [x] Implement API endpoint for receipt upload (POST /receipts/upload)
+- [x] Add file upload handling with python-multipart
+- [x] Integrate external API for PDF text extraction
+- [x] Parse extracted data into structured format (Market, Branch, Date, Total, Products)
+- [x] Validate and store receipt data in database
+- [x] Associate receipts with authenticated user
+- [x] Implement error handling for invalid PDFs or API failures
+- [x] Add receipt listing endpoint (GET /receipts)
+- [x] Create frontend page for receipt upload with file input
+- [x] Display upload progress and success/error messages
+- [x] Add receipt details view with extracted information
 
 ## Additional Requisite: Spending Overview and Receipt Details
-- [ ] Create API endpoint for spending summary (GET /spending/summary) with week/month filters
-- [ ] Implement aggregation queries for spending by period
-- [ ] Create API endpoint for individual receipt details (GET /receipts/{id})
-- [ ] Ensure receipts are user-specific (filter by user_id)
-- [ ] Prevent unauthorized access to other users' receipts
-- [ ] Create frontend page for spending overview with charts (weekly/monthly spending)
-- [ ] Add filters for date range and period type
-- [ ] Create frontend page for receipt details with full information
-- [ ] Implement navigation between spending overview and receipt details
-- [ ] Add export functionality for spending reports (CSV/PDF)
-- [ ] Ensure responsive design for new pages
+- [x] Create API endpoint for spending summary (GET /spending/summary) with week/month filters
+- [x] Implement aggregation queries for spending by period
+- [x] Create API endpoint for individual receipt details (GET /receipts/{id})
+- [x] Ensure receipts are user-specific (filter by user_id)
+- [x] Prevent unauthorized access to other users' receipts
+- [x] Create frontend page for spending overview with charts (weekly/monthly spending)
+- [x] Add filters for date range and period type
+- [x] Create frontend page for receipt details with full information
+- [x] Implement navigation between spending overview and receipt details
+- [x] Add export functionality for spending reports (CSV/PDF)
+- [x] Ensure responsive design for new pages
 
 ## Performance & Optimization
 - [ ] Optimize bundle size (< 200 kB for frontend)
