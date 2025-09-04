@@ -39,6 +39,8 @@ export default function SpendingOverview() {
   const router = useRouter();
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [isClient, setIsClient] = useState(false);
+  const [selectedReceipts, setSelectedReceipts] = useState<number[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -112,6 +114,43 @@ export default function SpendingOverview() {
     document.body.removeChild(link);
   };
 
+  const handleSelectReceipt = (receiptId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedReceipts(prev => [...prev, receiptId]);
+    } else {
+      setSelectedReceipts(prev => prev.filter(id => id !== receiptId));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked && receipts) {
+      setSelectedReceipts(receipts.map(receipt => receipt.id));
+    } else {
+      setSelectedReceipts([]);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedReceipts.length === 0) return;
+
+    try {
+      // Delete receipts one by one
+      for (const receiptId of selectedReceipts) {
+        await api.delete(`/receipts/${receiptId}`);
+      }
+
+      // Clear selection and refresh data
+      setSelectedReceipts([]);
+      setShowDeleteConfirm(false);
+
+      // Refetch data
+      window.location.reload();
+    } catch (error) {
+      console.error('Error deleting receipts:', error);
+      alert('Error deleting receipts. Please try again.');
+    }
+  };
+
   if (!isClient) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -139,6 +178,14 @@ export default function SpendingOverview() {
               >
                 Export CSV
               </button>
+              {selectedReceipts.length > 0 && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700"
+                >
+                  Remove Selected ({selectedReceipts.length})
+                </button>
+              )}
               <Link
                 href="/receipt-upload"
                 className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
@@ -155,6 +202,37 @@ export default function SpendingOverview() {
           </div>
         </div>
       </header>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3 text-center">
+              <h3 className="text-lg font-medium text-gray-900">Confirm Deletion</h3>
+              <div className="mt-2 px-7 py-3">
+                <p className="text-sm text-gray-500">
+                  Are you sure you want to delete {selectedReceipts.length} receipt{selectedReceipts.length > 1 ? 's' : ''}?
+                  This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex items-center px-4 py-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-4 py-2 bg-gray-300 text-gray-900 text-base font-medium rounded-md w-full mr-2 hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteSelected}
+                  className="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-full hover:bg-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -329,6 +407,14 @@ export default function SpendingOverview() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <input
+                            type="checkbox"
+                            checked={receipts ? selectedReceipts.length === receipts.length && receipts.length > 0 : false}
+                            onChange={(e) => handleSelectAll(e.target.checked)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Market
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -348,6 +434,14 @@ export default function SpendingOverview() {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {receipts.slice(0, 10).map((receipt) => (
                         <tr key={receipt.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={selectedReceipts.includes(receipt.id)}
+                              onChange={(e) => handleSelectReceipt(receipt.id, e.target.checked)}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            />
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {receipt.market}
                           </td>

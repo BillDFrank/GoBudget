@@ -87,10 +87,10 @@ export default function ReceiptDetails() {
             <div className="flex justify-between items-center py-4">
               <h1 className="text-2xl font-bold text-gray-900">Receipt Details</h1>
               <Link
-                href="/dashboard"
+                href="/spending-overview"
                 className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
               >
-                Back to Dashboard
+                ← Back to Spending Overview
               </Link>
             </div>
           </div>
@@ -113,10 +113,10 @@ export default function ReceiptDetails() {
             <div className="flex justify-between items-center py-4">
               <h1 className="text-2xl font-bold text-gray-900">Receipt Details</h1>
               <Link
-                href="/dashboard"
+                href="/spending-overview"
                 className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
               >
-                Back to Dashboard
+                ← Back to Spending Overview
               </Link>
             </div>
           </div>
@@ -125,10 +125,10 @@ export default function ReceiptDetails() {
           <div className="bg-red-50 border border-red-200 rounded-md p-4">
             <p className="text-red-800">Error loading receipt details. The receipt may not exist or you may not have permission to view it.</p>
             <Link
-              href="/dashboard"
+              href="/spending-overview"
               className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
             >
-              Back to Dashboard
+              ← Back to Spending Overview
             </Link>
           </div>
         </main>
@@ -144,10 +144,10 @@ export default function ReceiptDetails() {
             <div className="flex justify-between items-center py-4">
               <h1 className="text-2xl font-bold text-gray-900">Receipt Details</h1>
               <Link
-                href="/dashboard"
+                href="/spending-overview"
                 className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
               >
-                Back to Dashboard
+                ← Back to Spending Overview
               </Link>
             </div>
           </div>
@@ -156,10 +156,10 @@ export default function ReceiptDetails() {
           <div className="text-center py-12">
             <p className="text-gray-600">Receipt not found.</p>
             <Link
-              href="/dashboard"
+              href="/spending-overview"
               className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
             >
-              Back to Dashboard
+              ← Back to Spending Overview
             </Link>
           </div>
         </main>
@@ -182,10 +182,10 @@ export default function ReceiptDetails() {
                 Upload Another Receipt
               </Link>
               <Link
-                href="/dashboard"
+                href="/spending-overview"
                 className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
               >
-                Back to Dashboard
+                ← Back to Spending Overview
               </Link>
             </div>
           </div>
@@ -350,10 +350,10 @@ export default function ReceiptDetails() {
               Upload Another Receipt
             </Link>
             <Link
-              href="/dashboard"
+              href="/spending-overview"
               className="bg-gray-600 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-700"
             >
-              Back to Dashboard
+              ← Back to Spending Overview
             </Link>
           </div>
         </div>
