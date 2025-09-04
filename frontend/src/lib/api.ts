@@ -1,7 +1,20 @@
 import axios from 'axios';
 
-// Force local API URL for development
-const API_BASE_URL = 'http://localhost:8001';
+// Determine API URL based on environment
+const getApiBaseUrl = () => {
+  // If we're running in development (localhost), use localhost
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return 'http://localhost:8001';
+  }
+  // If we're on the production domain, use the same domain with /api prefix
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.hostname}/api`;
+  }
+  // Fallback for server-side rendering
+  return 'https://gobudget.duckdns.org/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
