@@ -2,9 +2,10 @@ version: '3.8'
 
 services:
   backend:
-    build: ./backend
+    image: gobudget-backend:latest
+    container_name: gobudget-backend
     ports:
-      - "8001:8000"
+      - "8000:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - JWT_SECRET=${JWT_SECRET}
@@ -13,23 +14,57 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-      - COOKIE_DOMAIN=${COOKIE_DOMAIN}
+      - API_HOST=${API_HOST}
+      - API_PORT=${API_PORT}
     restart: unless-stopped
     networks:
       - gobudget-network
       - portfolio_default
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
   frontend:
-    build: ./frontend
+    image: gobudget-frontend:latest
+    container_name: gobudget-frontend
     ports:
-      - "3001:3000"
+      - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
     restart: unless-stopped
     networks:
       - gobudget-network
+    depends_on:
+      - backend
+
+  postgres:
+    image: postgres:16
+    container_name: gobudget-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gobudget-network
+      - portfolio_default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
 
 networks:
   gobudget-network:

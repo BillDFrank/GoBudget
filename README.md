@@ -27,7 +27,7 @@ The Family Financial App is a web application built using Next.js, Tailwind CSS,
 ## Project Structure
 
 ```
-/home/ubuntu/family-finances/
+2. Copy project files to `/home/gobudget/GoBudget/`
 ├── frontend/          # Next.js source code
 │   ├── Dockerfile
 │   └── next.config.js
@@ -79,9 +79,32 @@ The Family Financial App is a web application built using Next.js, Tailwind CSS,
 
 ### Production Deployment
 
+For detailed deployment instructions to Hetzner VPS with GitHub Actions:
+
+1. **Quick VPS Setup**: Run the setup script on your VPS:
+   ```bash
+   wget https://raw.githubusercontent.com/yourusername/gobudget/main/vps-setup.sh
+   chmod +x vps-setup.sh
+   ./vps-setup.sh
+   ```
+
+2. **Configure GitHub Secrets**: Set up the required secrets in your GitHub repository:
+   - `VPS_HOST`: Your VPS IP/domain
+   - `VPS_USERNAME`: SSH username
+   - `VPS_SSH_KEY`: Private SSH key
+   - `VPS_SSH_PASSPHRASE`: SSH key passphrase (if any)
+   - `DB_PASSWORD`: Database password
+   - `JWT_SECRET`: JWT secret key
+
+3. **Deploy**: Push to the main branch to trigger automatic deployment, or run the workflow manually.
+
+📖 **Full Deployment Guide**: See [`DEPLOYMENT.md`](DEPLOYMENT.md) for comprehensive setup instructions, troubleshooting, and security best practices.
+
+### Manual Production Deployment
+
 1. Set up VPS with Ubuntu 22.04 LTS, Docker, Nginx, etc.
 
-2. Copy project files to `/home/ubuntu/family-finances/`
+2. Copy project files to `/home/gobudget/GoBudget/`
 
 3. Update `.env` with production values.
 

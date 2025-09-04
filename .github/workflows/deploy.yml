@@ -1,0 +1,172 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare deployment directories
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
+          script: |
+            # Create deployment directories if they don't exist
+            mkdir -p /home/gobudget/GoBudget
+
+            # Create temporary directory for new code
+            rm -rf /tmp/gobudget-deploy
+            mkdir -p /tmp/gobudget-deploy
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
+          source: "."
+          target: "/tmp/gobudget-deploy"
+
+      - name: Smart deployment with selective service updates
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
+          script: |
+            # Ensure directory exists
+            mkdir -p /home/gobudget/GoBudget
+            cd /home/gobudget/GoBudget
+
+            # Backup current deployment (if it exists)
+            if [ -d "/home/gobudget/GoBudget" ] && [ "$(ls -A /home/gobudget/GoBudget)" ]; then
+              cp -r /home/gobudget/GoBudget /home/gobudget/GoBudget-backup-$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
+            fi
+
+            # Check if services are running and healthy
+            BACKEND_RUNNING=false
+            FRONTEND_RUNNING=false
+
+            if docker compose ps --services --filter "status=running" | grep -q "backend" || docker-compose ps --services --filter "status=running" | grep -q "backend"; then
+              if curl -f http://localhost:8000/health >/dev/null 2>&1 || curl -f http://localhost:8000/ >/dev/null 2>&1; then
+                BACKEND_RUNNING=true
+                echo "✅ Backend is running and healthy"
+              else
+                echo "⚠️ Backend container is running but not healthy"
+              fi
+            else
+              echo "❌ Backend is not running"
+            fi
+
+            if docker compose ps --services --filter "status=running" | grep -q "frontend" || docker-compose ps --services --filter "status=running" | grep -q "frontend"; then
+              if curl -f http://localhost:3000 >/dev/null 2>&1; then
+                FRONTEND_RUNNING=true
+                echo "✅ Frontend is running and healthy"
+              else
+                echo "⚠️ Frontend container is running but not healthy"
+              fi
+            else
+              echo "❌ Frontend is not running"
+            fi
+
+            # Replace with new code
+            echo "Replacing with new code..."
+            rm -rf /home/gobudget/GoBudget/*
+            cp -r /tmp/gobudget-deploy/* /home/gobudget/GoBudget/
+            cd /home/gobudget/GoBudget
+
+            # Verify files were copied
+            echo "Files in deployment directory:"
+            ls -la
+
+            # Set proper permissions
+            chmod +x *.sh 2>/dev/null || true
+
+            # Create production environment file
+            cat > .env << EOF
+            POSTGRES_HOST=portfolio-postgres-1
+            POSTGRES_PORT=5432
+            POSTGRES_USER=gobudget
+            POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
+            POSTGRES_DB=gobudget
+            DATABASE_URL=postgresql://gobudget:${{ secrets.DB_PASSWORD }}@portfolio-postgres-1:5432/gobudget
+
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_ALGORITHM=HS256
+            JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+            JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+
+            API_HOST=0.0.0.0
+            API_PORT=8000
+
+            DOMAIN=gobudget.duckdns.org
+
+            NEXT_PUBLIC_API_URL=https://gobudget.duckdns.org/api
+            NEXT_PUBLIC_APP_URL=https://gobudget.duckdns.org
+            EOF
+
+            # Stop the services to update them
+            echo "Stopping services for update..."
+            docker compose stop backend frontend 2>/dev/null || docker-compose stop backend frontend 2>/dev/null || true
+            docker compose rm -f backend frontend 2>/dev/null || docker-compose rm -f backend frontend 2>/dev/null || true
+
+            # Build the services
+            echo "Building services..."
+            docker compose build backend frontend || docker-compose build backend frontend
+
+            # Check if build was successful
+            if [ $? -eq 0 ]; then
+              echo "✅ Docker build successful"
+            else
+              echo "❌ Docker build failed"
+              exit 1
+            fi
+
+            # Start the services
+            echo "Starting services..."
+            docker compose up -d backend frontend || docker-compose up -d backend frontend
+
+            # Check if services started successfully
+            if [ $? -eq 0 ]; then
+              echo "✅ Docker services start command successful"
+            else
+              echo "❌ Docker services start command failed"
+              exit 1
+            fi
+
+            # Wait for containers to start
+            sleep 30
+
+            # Verify containers are running
+            echo "Container status:"
+            docker compose ps || docker-compose ps
+
+            # Clean up unused images and temp files
+            rm -rf /tmp/gobudget-deploy
+            docker image prune -f --filter "label=com.docker.compose.service=backend" --filter "label=com.docker.compose.service=frontend" 2>/dev/null || true
+
+            # Test the deployment
+            echo "Testing deployment..."
+
+            echo "Checking backend health..."
+            curl -v http://localhost:8000/health || curl -v http://localhost:8000/ || echo "Backend health check failed"
+
+            echo "Checking frontend..."
+            curl -v http://localhost:3000 || echo "Frontend check failed"
+
+            echo "Checking nginx proxy..."
+            curl -v https://gobudget.duckdns.org || echo "Nginx proxy check failed"
