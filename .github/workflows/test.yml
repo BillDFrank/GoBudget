@@ -99,7 +99,7 @@ jobs:
       - name: Start backend service
         run: |
           cd backend
-          python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 &
           echo $! > backend.pid
           sleep 10
 
