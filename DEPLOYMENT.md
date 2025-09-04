@@ -4,6 +4,7 @@
 
 1. **Hetzner VPS** with Docker and Docker Compose installed
 2. **SSH Key** for ### 1. **DNS Resolution Issues**
+
    ```bash
    # Test DNS resolution from your local machine
    nslookup your-domain.com
@@ -13,52 +14,60 @@
    ```
 
    **Common Solutions:**
+
    - **Use IP Address**: Replace domain with direct IP in `VPS_HOST` secret
    - **Check Domain**: Ensure domain is properly configured and propagated
    - **Firewall**: Verify VPS firewall allows connections from GitHub Actions IPs
    - **DNS Propagation**: Wait 24-48 hours if domain was recently changed
 
 ### 2. **Quick Fix - Use IP Address**
-   If DNS continues to fail, update your `VPS_HOST` secret to use your VPS's IP address directly:
 
-   **Find your VPS IP:**
-   ```bash
-   # From Hetzner Console:
-   # 1. Go to your project dashboard
-   # 2. Click on your server
-   # 3. Copy the IPv4 address
+If DNS continues to fail, update your `VPS_HOST` secret to use your VPS's IP address directly:
 
-   # Or from your VPS (if you can access it):
-   curl ifconfig.me
-   hostname -I
+**Find your VPS IP:**
 
-   # Then update the VPS_HOST secret in GitHub to: 123.456.789.0
-   ```
+```bash
+# From Hetzner Console:
+# 1. Go to your project dashboard
+# 2. Click on your server
+# 3. Copy the IPv4 address
 
-   **Why this happens:**
-   - GitHub Actions runners may have DNS resolution issues with certain domains
-   - Using IP address bypasses DNS entirely
-   - This is a common workaround for deployment issues
+# Or from your VPS (if you can access it):
+curl ifconfig.me
+hostname -I
+
+# Then update the VPS_HOST secret in GitHub to: 123.456.789.0
+```
+
+**Why this happens:**
+
+- GitHub Actions runners may have DNS resolution issues with certain domains
+- Using IP address bypasses DNS entirely
+- This is a common workaround for deployment issues
 
 ### 3. **SSH Connection Issues**
-   ```bash
-   # Test SSH connection
-   ssh -T user@your-vps-ip
 
-   # Check SSH key permissions
-   chmod 600 ~/.ssh/id_rsa
-   chmod 644 ~/.ssh/id_rsa.pub
-   ```
+```bash
+# Test SSH connection
+ssh -T user@your-vps-ip
 
-   **Common Issues:**
-   - **Wrong secret names**: Make sure you're using `VPS_USERNAME`, `VPS_SSH_KEY`, etc.
-   - **SSH key format**: Ensure your private key is properly formatted
-   - **Passphrase**: If your SSH key has a passphrase, set `VPS_SSH_PASSPHRASE` secret
+# Check SSH key permissions
+chmod 600 ~/.ssh/id_rsa
+chmod 644 ~/.ssh/id_rsa.pub
+```
 
-   **Common Issues:**
-   - **Wrong secret names**: Make sure you're using `VPS_USERNAME`, `VPS_SSH_KEY`, etc. (not the old names)
-   - **SSH key format**: Ensure your private key is properly formatted (no extra spaces or line breaks)
-   - **Passphrase**: If your SSH key has a passphrase, set `VPS_SSH_PASSPHRASE` secretess authentication
+**Common Issues:**
+
+- **Wrong secret names**: Make sure you're using `VPS_USERNAME`, `VPS_SSH_KEY`, etc.
+- **SSH key format**: Ensure your private key is properly formatted
+- **Passphrase**: If your SSH key has a passphrase, set `VPS_SSH_PASSPHRASE` secret
+
+**Common Issues:**
+
+- **Wrong secret names**: Make sure you're using `VPS_USERNAME`, `VPS_SSH_KEY`, etc. (not the old names)
+- **SSH key format**: Ensure your private key is properly formatted (no extra spaces or line breaks)
+- **Passphrase**: If your SSH key has a passphrase, set `VPS_SSH_PASSPHRASE` secretess authentication
+
 3. **GitHub Repository** with proper permissions
 
 ## GitHub Secrets Setup
@@ -68,23 +77,28 @@ Add these secrets to your GitHub repository (Settings → Secrets and variables 
 ### Required Secrets:
 
 1. **VPS_HOST**
+
    - Your VPS IP address or domain name
    - Example: `gobudget.duckdns.org` or `123.456.789.0`
 
 2. **VPS_USERNAME**
+
    - SSH username for your VPS
    - Usually: `root` or your sudo user
 
 3. **VPS_SSH_KEY**
+
    - Your private SSH key for connecting to the VPS
    - Generate with: `ssh-keygen -t rsa -b 4096 -C "github-actions@gobudget.duckdns.org"`
    - Copy the private key content (not the .pub file)
 
 4. **VPS_SSH_PASSPHRASE** (optional)
+
    - Passphrase for your SSH key (if you set one)
    - Leave empty if your SSH key has no passphrase
 
 5. **DB_PASSWORD**
+
    - Database password for PostgreSQL
    - Should match: `Secure1!`
 
@@ -154,12 +168,14 @@ chmod +x health-check.sh
 ### Automatic Deployment
 
 Once secrets are configured, deployment happens automatically on:
+
 - Push to `main` branch
 - Manual trigger via GitHub Actions
 
 ### Manual Deployment
 
 You can also trigger deployment manually:
+
 1. Go to GitHub repository
 2. Click "Actions" tab
 3. Select "Deploy to Production" workflow
@@ -187,6 +203,7 @@ docker-compose exec backend curl -f http://localhost:8000/
 ### Troubleshooting
 
 1. **SSH Connection Issues**
+
    ```bash
    # Test SSH connection
    ssh -T user@your-vps-ip
@@ -197,6 +214,7 @@ docker-compose exec backend curl -f http://localhost:8000/
    ```
 
 2. **Container Issues**
+
    ```bash
    # Restart services
    docker-compose restart
@@ -206,6 +224,7 @@ docker-compose exec backend curl -f http://localhost:8000/
    ```
 
 3. **Database Connection Issues**
+
    ```bash
    # Check if PostgreSQL is running
    docker-compose exec postgres pg_isready
@@ -227,6 +246,7 @@ The deployment uses these environment variables:
 ## SSL Certificate
 
 Since you mentioned SSL is already set up, make sure:
+
 1. SSL certificates are properly configured
 2. Nginx/Caddy is proxying requests correctly
 3. SSL certificates are renewed automatically
@@ -236,12 +256,14 @@ Since you mentioned SSL is already set up, make sure:
 After successful deployment:
 
 1. **Verify Services**
+
    ```bash
    curl https://gobudget.duckdns.org/
    curl https://gobudget.duckdns.org/api/
    ```
 
 2. **Check Application Logs**
+
    ```bash
    docker-compose logs -f backend
    docker-compose logs -f frontend

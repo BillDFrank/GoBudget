@@ -5,6 +5,7 @@ import json
 # Test the API endpoints
 BASE_URL = "http://localhost:8001"
 
+
 @pytest.mark.api
 class TestAuthAPI:
     """Test authentication endpoints"""
@@ -19,7 +20,8 @@ class TestAuthAPI:
 
         response = requests.post(url, json=data)
         # Registration might fail if user already exists, but endpoint should be reachable
-        assert response.status_code in [200, 400, 409]  # Success or user exists
+        assert response.status_code in [
+            200, 400, 409]  # Success or user exists
 
     def test_auth_login(self):
         """Test user login"""
@@ -44,7 +46,9 @@ class TestAuthAPI:
             assert "access_token" in token_data
             return token_data.get("access_token")
         else:
-            pytest.skip("Login failed - user might not exist or endpoint not working")
+            pytest.skip(
+                "Login failed - user might not exist or endpoint not working")
+
 
 @pytest.mark.api
 def test_receipts_endpoint():
@@ -78,6 +82,7 @@ def test_receipts_endpoint():
     # Should return 200 for success or 401 for auth issues
     assert response.status_code in [200, 401, 422]
 
+
 @pytest.mark.api
 def test_receipts_upload_endpoint():
     """Test receipts upload endpoint structure"""
@@ -110,6 +115,7 @@ def test_receipts_upload_endpoint():
     response = requests.post(url, headers=headers)
     # Should get some response (might be 400 for missing file, but endpoint should exist)
     assert response.status_code != 404  # 404 would mean endpoint doesn't exist
+
 
 @pytest.mark.api
 def test_health_endpoint():

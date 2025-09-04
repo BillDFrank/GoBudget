@@ -55,12 +55,14 @@ Go Budget is a web application built using Next.js, Tailwind CSS, and FastAPI. I
 ### Local Development
 
 1. Clone the repository:
+
    ```bash
    git clone <repository-url>
    cd gobudget
    ```
 
 2. Copy environment template:
+
    ```bash
    cp .env.example .env
    ```
@@ -68,6 +70,7 @@ Go Budget is a web application built using Next.js, Tailwind CSS, and FastAPI. I
 3. Update `.env` with your database credentials and other settings.
 
 4. Build and run the services:
+
    ```bash
    docker-compose up --build
    ```
@@ -82,6 +85,7 @@ Go Budget is a web application built using Next.js, Tailwind CSS, and FastAPI. I
 For detailed deployment instructions to Hetzner VPS with GitHub Actions:
 
 1. **Quick VPS Setup**: Run the setup script on your VPS:
+
    ```bash
    wget https://raw.githubusercontent.com/yourusername/gobudget/main/vps-setup.sh
    chmod +x vps-setup.sh
@@ -89,6 +93,7 @@ For detailed deployment instructions to Hetzner VPS with GitHub Actions:
    ```
 
 2. **Configure GitHub Secrets**: Set up the required secrets in your GitHub repository:
+
    - `VPS_HOST`: Your VPS IP/domain
    - `VPS_USERNAME`: SSH username
    - `VPS_SSH_KEY`: Private SSH key
@@ -109,6 +114,7 @@ For detailed deployment instructions to Hetzner VPS with GitHub Actions:
 3. Update `.env` with production values.
 
 4. Run Docker Compose:
+
    ```bash
    docker-compose up -d
    ```
@@ -147,16 +153,19 @@ GoBudget includes a comprehensive test suite covering API endpoints, database op
 ### Running Tests
 
 1. **Install test dependencies:**
+
    ```bash
    pip install -r tests/requirements.txt
    ```
 
 2. **Run the full test suite:**
+
    ```bash
    python tests/run_tests.py
    ```
 
 3. **Run specific tests:**
+
    ```bash
    # API tests
    pytest tests/test_api.py -v
@@ -179,6 +188,7 @@ GoBudget includes a comprehensive test suite covering API endpoints, database op
 ### CI/CD Testing
 
 Tests run automatically on:
+
 - Push to `main` branch
 - Pull requests
 - Manual trigger via GitHub Actions

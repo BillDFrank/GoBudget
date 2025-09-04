@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+
 @pytest.mark.database
 class TestDatabaseConnection:
     """Test database connection and basic operations"""
@@ -112,12 +113,14 @@ class TestDatabaseConnection:
         assert result[1] == "Connection test successful"
 
         # Clean up test data
-        cur.execute("DELETE FROM test_connection WHERE id = %s;", (inserted_id,))
+        cur.execute("DELETE FROM test_connection WHERE id = %s;",
+                    (inserted_id,))
 
         # Close cursor and connection
         cur.close()
         conn.commit()
         conn.close()
+
 
 @pytest.mark.database
 def test_database_migrations():

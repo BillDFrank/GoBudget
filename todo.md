@@ -3,17 +3,19 @@
 This document outlines all features needed to run the website, based on project.md and additional requisites. Each item is broken into small, actionable steps. Use [ ] for not done, [x] for done.
 
 ## Core Infrastructure Setup
-- [X] Set up PostgreSQL database (external instance)
-- [X] Configure environment variables in .env file
-- [X] Build and run Docker Compose services (backend, frontend, nginx)
-- [X] Set up SSL/TLS with Let's Encrypt for nginx
-- [X] Configure security headers in nginx (CSP, HSTS, etc.)
+
+- [x] Set up PostgreSQL database (external instance)
+- [x] Configure environment variables in .env file
+- [x] Build and run Docker Compose services (backend, frontend, nginx)
+- [x] Set up SSL/TLS with Let's Encrypt for nginx
+- [x] Configure security headers in nginx (CSP, HSTS, etc.)
 
 ## Backend Development (FastAPI)
+
 - [x] Create FastAPI application structure (main.py, routers, models)
 - [x] Implement JWT authentication with refresh tokens and HTTP-only cookies
 - [x] Set up SQLAlchemy models for users, transactions, categories
-- [X] Create database schema with Alembic migrations
+- [x] Create database schema with Alembic migrations
 - [x] Implement CRUD endpoints for transactions (/transactions)
 - [x] Implement dashboard API (/dashboard) with KPI calculations
 - [x] Implement income overview API (/income-overview) with aggregations
@@ -24,6 +26,7 @@ This document outlines all features needed to run the website, based on project.
 - [x] Set up Pydantic models for request/response validation
 
 ## Frontend Development (Next.js)
+
 - [x] Scaffold Next.js project with TypeScript and Tailwind CSS
 - [x] Implement global layout and navigation
 - [ ] Set up design system tokens in tailwind.config.ts (8-point grid, colors, typography)
@@ -44,6 +47,7 @@ This document outlines all features needed to run the website, based on project.
 - [ ] Implement error handling and toast notifications
 
 ## Authentication & Security
+
 - [x] Implement user registration and login endpoints
 - [x] Set up JWT token generation and validation
 - [ ] Configure secure HTTP-only cookies for tokens
@@ -53,6 +57,7 @@ This document outlines all features needed to run the website, based on project.
 - [ ] Set up Snyk/Dependabot for dependency scanning
 
 ## Database & Data Management
+
 - [x] Design database schema for users, transactions, categories
 - [ ] Set up Alembic for database migrations
 - [ ] Implement data seeding for initial categories
@@ -60,6 +65,7 @@ This document outlines all features needed to run the website, based on project.
 - [ ] Set up database backups and recovery
 
 ## Deployment & DevOps
+
 - [ ] Set up GitHub Actions CI/CD pipeline
 - [ ] Configure Docker multi-stage builds
 - [ ] Deploy to AWS ECS Fargate with RDS PostgreSQL
@@ -69,6 +75,7 @@ This document outlines all features needed to run the website, based on project.
 - [ ] Set up HTTPS auto-renewal
 
 ## QA & Testing
+
 - [ ] Write Cypress E2E tests for critical flows
 - [ ] Write Playwright E2E tests
 - [ ] Perform accessibility audit with Axe-core
@@ -78,6 +85,7 @@ This document outlines all features needed to run the website, based on project.
 - [ ] Conduct load testing for 10k users
 
 ## Additional Requisite: Receipt Upload and Processing
+
 - [x] Create database tables for receipts (market, branch, date, total, user_id)
 - [x] Create database table for receipt products (product, type, quantity, price, discount, discount2, receipt_id)
 - [x] Implement API endpoint for receipt upload (POST /receipts/upload)
@@ -93,6 +101,7 @@ This document outlines all features needed to run the website, based on project.
 - [x] Add receipt details view with extracted information
 
 ## Additional Requisite: Spending Overview and Receipt Details
+
 - [x] Create API endpoint for spending summary (GET /spending/summary) with week/month filters
 - [x] Implement aggregation queries for spending by period
 - [x] Create API endpoint for individual receipt details (GET /receipts/{id})
@@ -106,6 +115,7 @@ This document outlines all features needed to run the website, based on project.
 - [x] Ensure responsive design for new pages
 
 ## Performance & Optimization
+
 - [ ] Optimize bundle size (< 200 kB for frontend)
 - [ ] Implement caching strategies (React-Query, CDN)
 - [ ] Add lazy loading for components and routes
@@ -114,6 +124,7 @@ This document outlines all features needed to run the website, based on project.
 - [ ] Monitor and optimize API response times (< 200 ms p95)
 
 ## Final Touches
+
 - [ ] Implement empty states, loading states, and error states
 - [ ] Add micro-interactions and animations
 - [ ] Conduct final accessibility audit
