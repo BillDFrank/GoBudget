@@ -76,15 +76,15 @@ def main():
     results.append(("Docker Services", docker_running))
 
     # Test 2: Wait for backend to be ready
-    backend_ready = wait_for_service("http://localhost:8000/health", "Backend API")
+    backend_ready = wait_for_service("http://localhost:8001/health", "Backend API")
     results.append(("Backend Ready", backend_ready))
 
     if not backend_ready:
-        backend_ready = wait_for_service("http://localhost:8000/", "Backend API (fallback)")
+        backend_ready = wait_for_service("http://localhost:8001/", "Backend API (fallback)")
         results.append(("Backend Ready (fallback)", backend_ready))
 
     # Test 3: Wait for frontend to be ready (if running)
-    frontend_ready = wait_for_service("http://localhost:3000", "Frontend")
+    frontend_ready = wait_for_service("http://localhost:3001", "Frontend")
     results.append(("Frontend Ready", frontend_ready))
 
     # Test 4: Database connection test

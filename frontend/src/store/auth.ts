@@ -26,7 +26,7 @@ export const useAuthStore = create<AuthState>()(
       login: async (username: string, password: string) => {
         set({ isLoading: true });
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/login`, {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/auth/login`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
@@ -46,7 +46,7 @@ export const useAuthStore = create<AuthState>()(
           localStorage.setItem('access_token', data.access_token);
 
           // Get user info
-          const userResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/me`, {
+          const userResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/auth/me`, {
             headers: {
               'Authorization': `Bearer ${data.access_token}`,
             },
@@ -67,7 +67,7 @@ export const useAuthStore = create<AuthState>()(
       register: async (username: string, password: string) => {
         set({ isLoading: true });
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/register`, {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/auth/register`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -99,7 +99,7 @@ export const useAuthStore = create<AuthState>()(
         if (!token) return;
 
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/me`, {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/auth/me`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },

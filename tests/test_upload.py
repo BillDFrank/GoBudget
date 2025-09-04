@@ -4,7 +4,7 @@ import requests
 @pytest.mark.upload
 def test_pdf_upload():
     """Test PDF upload with a sample file"""
-    BASE_URL = "http://localhost:8000"
+    BASE_URL = "http://localhost:8001"
 
     # First login to get a token
     login_url = f"{BASE_URL}/auth/login"
@@ -47,7 +47,7 @@ def test_pdf_upload():
 @pytest.mark.upload
 def test_upload_endpoint_exists():
     """Test that upload endpoint exists"""
-    BASE_URL = "http://localhost:8000"
+    BASE_URL = "http://localhost:8001"
 
     # First login to get a token
     login_url = f"{BASE_URL}/auth/login"
@@ -80,7 +80,7 @@ def test_upload_endpoint_exists():
 @pytest.mark.upload
 def test_upload_with_invalid_file():
     """Test upload with invalid file type"""
-    BASE_URL = "http://localhost:8000"
+    BASE_URL = "http://localhost:8001"
 
     # First login to get a token
     login_url = f"{BASE_URL}/auth/login"

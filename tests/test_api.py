@@ -3,7 +3,7 @@ import requests
 import json
 
 # Test the API endpoints
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8001"
 
 @pytest.mark.api
 class TestAuthAPI:

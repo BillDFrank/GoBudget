@@ -62,7 +62,7 @@ jobs:
             FRONTEND_RUNNING=false
 
             if docker compose ps --services --filter "status=running" | grep -q "backend" || docker-compose ps --services --filter "status=running" | grep -q "backend"; then
-              if curl -f http://localhost:8000/health >/dev/null 2>&1 || curl -f http://localhost:8000/ >/dev/null 2>&1; then
+              if curl -f http://localhost:8001/health >/dev/null 2>&1 || curl -f http://localhost:8001/ >/dev/null 2>&1; then
                 BACKEND_RUNNING=true
                 echo "✅ Backend is running and healthy"
               else
@@ -73,7 +73,7 @@ jobs:
             fi
 
             if docker compose ps --services --filter "status=running" | grep -q "frontend" || docker-compose ps --services --filter "status=running" | grep -q "frontend"; then
-              if curl -f http://localhost:3000 >/dev/null 2>&1; then
+              if curl -f http://localhost:3001 >/dev/null 2>&1; then
                 FRONTEND_RUNNING=true
                 echo "✅ Frontend is running and healthy"
               else
@@ -163,10 +163,10 @@ jobs:
             echo "Testing deployment..."
 
             echo "Checking backend health..."
-            curl -v http://localhost:8000/health || curl -v http://localhost:8000/ || echo "Backend health check failed"
+            curl -v http://localhost:8001/health || curl -v http://localhost:8001/ || echo "Backend health check failed"
 
             echo "Checking frontend..."
-            curl -v http://localhost:3000 || echo "Frontend check failed"
+            curl -v http://localhost:3001 || echo "Frontend check failed"
 
             echo "Checking nginx proxy..."
             curl -v https://gobudget.duckdns.org || echo "Nginx proxy check failed"

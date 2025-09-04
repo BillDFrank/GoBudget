@@ -74,8 +74,8 @@ Go Budget is a web application built using Next.js, Tailwind CSS, and FastAPI. I
 
 5. Access the application:
    - Frontend: http://localhost
-   - Backend API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
+   - Backend API: http://localhost:8001
+   - API Docs: http://localhost:8001/docs
 
 ### Production Deployment
 

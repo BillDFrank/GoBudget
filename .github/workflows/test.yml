@@ -64,8 +64,8 @@ jobs:
           API_HOST=0.0.0.0
           API_PORT=8000
 
-          NEXT_PUBLIC_API_URL=http://localhost:8000/api
-          NEXT_PUBLIC_APP_URL=http://localhost:3000
+          NEXT_PUBLIC_API_URL=http://localhost:8001/api
+          NEXT_PUBLIC_APP_URL=http://localhost:3001
           EOF
 
       - name: Wait for PostgreSQL
@@ -106,7 +106,7 @@ jobs:
       - name: Test backend health
         run: |
           echo 'Testing backend health endpoint...'
-          curl -f http://localhost:8000/health || curl -f http://localhost:8000/ || (echo 'Backend health check failed' && exit 1)
+          curl -f http://localhost:8001/health || curl -f http://localhost:8001/ || (echo 'Backend health check failed' && exit 1)
           echo 'Backend is healthy!'
 
       - name: Run API tests
