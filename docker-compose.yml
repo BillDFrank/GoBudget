@@ -1,5 +1,8 @@
 services:
   backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     image: gobudget-backend:latest
     container_name: gobudget-backend
     ports:
@@ -26,6 +29,9 @@ services:
       - "host.docker.internal:host-gateway"
 
   frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     image: gobudget-frontend:latest
     container_name: gobudget-frontend
     ports:
