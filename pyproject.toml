@@ -1,7 +1,7 @@
 [project]
 name = "gobudget"
 version = "0.1.0"
-description = "Family Financial App - Track and manage finances with intuitive dashboards"
+description = "Go Budget - Track and manage finances with intuitive dashboards"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -1,5 +1,5 @@
 Project Overview
-The Family Financial App is a web application built using Next.js, Tailwind CSS, and FastAPI. It enables families to track and manage their finances by inputting income, expenses, savings, and investments, and visualizing key financial metrics through intuitive dashboards and charts. The app aims to provide a user-friendly interface, real-time data processing, and secure data handling to empower families to make informed financial decisions.
+Go Budget is a web application built using Next.js, Tailwind CSS, and FastAPI. It enables families to track and manage their finances by inputting income, expenses, savings, and investments, and visualizing key financial metrics through intuitive dashboards and charts. The app aims to provide a user-friendly interface, real-time data processing, and secure data handling to empower families to make informed financial decisions.
 Project Goals
 • Allow users to input financial data (income, expenses, savings, investments) with relevant details.
 • Provide a dashboard to visualize monthly financial metrics (income, expenses, savings, investments).

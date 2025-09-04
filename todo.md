@@ -1,4 +1,4 @@
-# Todo List for Family Financial App
+# Todo List for Go Budget
 
 This document outlines all features needed to run the website, based on project.md and additional requisites. Each item is broken into small, actionable steps. Use [ ] for not done, [x] for done.
 

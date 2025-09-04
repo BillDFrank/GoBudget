@@ -1,8 +1,8 @@
-# Family Financial App
+# Go Budget
 
 ## Overview
 
-The Family Financial App is a web application built using Next.js, Tailwind CSS, and FastAPI. It enables families to track and manage their finances by inputting income, expenses, savings, and investments, and visualizing key financial metrics through intuitive dashboards and charts. The app aims to provide a user-friendly interface, real-time data processing, and secure data handling to empower families to make informed financial decisions.
+Go Budget is a web application built using Next.js, Tailwind CSS, and FastAPI. It enables families to track and manage their finances by inputting income, expenses, savings, and investments, and visualizing key financial metrics through intuitive dashboards and charts. The app aims to provide a user-friendly interface, real-time data processing, and secure data handling to empower families to make informed financial decisions.
 
 ## Features
 
@@ -57,7 +57,7 @@ The Family Financial App is a web application built using Next.js, Tailwind CSS,
 1. Clone the repository:
    ```bash
    git clone <repository-url>
-   cd family-finances
+   cd gobudget
    ```
 
 2. Copy environment template:
@@ -139,6 +139,51 @@ See `todo.md` for detailed deployment steps.
 - `GET /savings-investments`: Savings and investments data
 - `POST /transactions`: Create new transaction
 - `GET /transactions`: List transactions
+
+## Testing
+
+GoBudget includes a comprehensive test suite covering API endpoints, database operations, and upload functionality.
+
+### Running Tests
+
+1. **Install test dependencies:**
+   ```bash
+   pip install -r tests/requirements.txt
+   ```
+
+2. **Run the full test suite:**
+   ```bash
+   python tests/run_tests.py
+   ```
+
+3. **Run specific tests:**
+   ```bash
+   # API tests
+   pytest tests/test_api.py -v
+
+   # Database tests
+   pytest tests/test_database.py -v
+
+   # Upload tests
+   pytest tests/test_upload.py -v
+   ```
+
+### Test Categories
+
+- **API Tests**: Authentication, receipts endpoints, health checks
+- **Database Tests**: Connection, CRUD operations, migrations
+- **Upload Tests**: File upload functionality and validation
+
+📖 **Full Testing Guide**: See [`tests/README.md`](tests/README.md) for detailed testing instructions and best practices.
+
+### CI/CD Testing
+
+Tests run automatically on:
+- Push to `main` branch
+- Pull requests
+- Manual trigger via GitHub Actions
+
+The test workflow includes PostgreSQL setup, backend service startup, and comprehensive validation of all components.
 
 ## Contributing
 
