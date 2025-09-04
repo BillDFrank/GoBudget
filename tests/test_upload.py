@@ -1,6 +1,7 @@
 import pytest
 import requests
 
+
 @pytest.mark.upload
 def test_pdf_upload():
     """Test PDF upload with a sample file"""
@@ -44,6 +45,7 @@ def test_pdf_upload():
     if response.status_code == 200:
         assert "upload" in response.text.lower() or "success" in response.text.lower()
 
+
 @pytest.mark.upload
 def test_upload_endpoint_exists():
     """Test that upload endpoint exists"""
@@ -76,6 +78,7 @@ def test_upload_endpoint_exists():
 
     # Should get 400 or similar for missing file
     assert response.status_code in [200, 400, 422]
+
 
 @pytest.mark.upload
 def test_upload_with_invalid_file():
