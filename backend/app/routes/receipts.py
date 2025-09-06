@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, and_
 from datetime import datetime, date, timedelta
 from typing import List
@@ -279,7 +279,7 @@ def get_receipts(
     current_user: User = Depends(get_current_user)
 ):
     """Get user's receipts"""
-    receipts = db.query(Receipt).filter(Receipt.user_id ==
+    receipts = db.query(Receipt).options(selectinload(Receipt.products)).filter(Receipt.user_id ==
                                         current_user.id).offset(skip).limit(limit).all()
     return receipts
 

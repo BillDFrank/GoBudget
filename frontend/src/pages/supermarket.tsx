@@ -378,6 +378,14 @@ export default function Supermarket() {
     }
   };
 
+  // Calculate total discount for a receipt
+  const calculateTotalDiscount = (receipt: Receipt): number => {
+    if (!receipt.products || receipt.products.length === 0) return 0;
+    return receipt.products.reduce((total, product) => {
+      return total + (product.discount || 0) + (product.discount2 || 0);
+    }, 0);
+  };
+
   if (loading) {
     return (
       <AdminLayout>
@@ -618,6 +626,14 @@ export default function Supermarket() {
                       <th scope="col" className="px-6 py-3">Market</th>
                       <th scope="col" className="px-6 py-3">Branch</th>
                       <th scope="col" className="px-6 py-3">Total Amount</th>
+                      <th scope="col" className="px-6 py-3">
+                        <div className="flex items-center gap-1">
+                          <span>Total Discount</span>
+                          <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                          </svg>
+                        </div>
+                      </th>
                       <th scope="col" className="px-6 py-3">Actions</th>
                     </tr>
                   </thead>
@@ -644,6 +660,16 @@ export default function Supermarket() {
                         <td className="px-6 py-4">{receipt.branch || '-'}</td>
                         <td className="px-6 py-4 font-semibold text-green-600">
                           {formatCurrency(receipt.total)}
+                        </td>
+                        <td className="px-6 py-4">
+                          {(() => {
+                            const totalDiscount = calculateTotalDiscount(receipt);
+                            return (
+                              <span className={`font-semibold ${totalDiscount > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                                {totalDiscount > 0 ? '-' : ''}{formatCurrency(totalDiscount)}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-6 py-4">
                           <button
@@ -728,21 +754,37 @@ export default function Supermarket() {
                             <th className="px-4 py-3 text-left">Type</th>
                             <th className="px-4 py-3 text-center">Quantity</th>
                             <th className="px-4 py-3 text-right">Price</th>
+                            <th className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <span>Discount</span>
+                                <svg className="w-3 h-3 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                </svg>
+                              </div>
+                            </th>
                             <th className="px-4 py-3 text-right">Total</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {selectedReceipt.products.map((product) => (
-                            <tr key={product.id} className="bg-white border-b">
-                              <td className="px-4 py-3 font-medium">{product.product}</td>
-                              <td className="px-4 py-3">{product.product_type}</td>
-                              <td className="px-4 py-3 text-center">{product.quantity}</td>
-                              <td className="px-4 py-3 text-right">{formatCurrency(product.price)}</td>
-                              <td className="px-4 py-3 text-right font-medium">
-                                {formatCurrency(product.price * product.quantity - product.discount - product.discount2)}
-                              </td>
-                            </tr>
-                          ))}
+                          {selectedReceipt.products.map((product) => {
+                            const productDiscount = (product.discount || 0) + (product.discount2 || 0);
+                            return (
+                              <tr key={product.id} className="bg-white border-b">
+                                <td className="px-4 py-3 font-medium">{product.product}</td>
+                                <td className="px-4 py-3">{product.product_type}</td>
+                                <td className="px-4 py-3 text-center">{product.quantity}</td>
+                                <td className="px-4 py-3 text-right">{formatCurrency(product.price)}</td>
+                                <td className="px-4 py-3 text-right">
+                                  <span className={`font-medium ${productDiscount > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                                    {productDiscount > 0 ? '-' : ''}{formatCurrency(productDiscount)}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right font-medium">
+                                  {formatCurrency(product.price * product.quantity - product.discount - product.discount2)}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
