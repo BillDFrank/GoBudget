@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useAuthStore } from '../../store/auth';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/api';
+import { formatCurrency, formatDate } from '../../utils/formatting';
 
 interface ReceiptProduct {
   id: number;
@@ -51,21 +52,6 @@ export default function ReceiptDetails() {
     },
     enabled: !!id && !!user,
   });
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
 
   if (!isClient) {
     return (

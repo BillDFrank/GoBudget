@@ -2,6 +2,10 @@ import axios from 'axios';
 
 // Determine API URL based on environment
 const getApiBaseUrl = () => {
+  // Check environment variable first
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
   // If we're running in development (localhost), use localhost
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     return 'http://localhost:8001';

@@ -284,24 +284,68 @@ def get_receipts(
     return receipts
 
 
-@router.get("/{receipt_id}", response_model=ReceiptSchema)
-def get_receipt(
-    receipt_id: int,
+@router.get("/summary", response_model=SpendingSummary)
+def get_monthly_summary(
+    year: int = None,
+    month: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get specific receipt details"""
-    receipt = db.query(Receipt).filter(
-        and_(Receipt.id == receipt_id, Receipt.user_id == current_user.id)
-    ).first()
+    """Get spending summary for a specific month/year"""
+    today = date.today()
 
-    if not receipt:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Receipt not found"
+    # Use current month/year if not specified
+    target_year = year if year is not None else today.year
+    target_month = month if month is not None else today.month
+
+    # Get start and end of the specified month
+    start_date = date(target_year, target_month, 1)
+
+    # Calculate last day of month
+    if target_month == 12:
+        end_date = date(target_year + 1, 1, 1) - timedelta(days=1)
+    else:
+        end_date = date(target_year, target_month + 1, 1) - timedelta(days=1)
+
+    # Get receipts in the month
+    receipts = db.query(Receipt).filter(
+        and_(
+            Receipt.user_id == current_user.id,
+            Receipt.date >= start_date,
+            Receipt.date <= end_date
         )
+    ).all()
 
-    return receipt
+    total_spent = sum(receipt.total for receipt in receipts)
+    receipt_count = len(receipts)
+    average_per_receipt = total_spent / receipt_count if receipt_count > 0 else 0
+
+    # Get top categories by product type
+    category_totals = db.query(
+        ReceiptProduct.product_type,
+        func.sum(ReceiptProduct.price * ReceiptProduct.quantity).label('total')
+    ).join(Receipt).filter(
+        and_(
+            Receipt.user_id == current_user.id,
+            Receipt.date >= start_date,
+            Receipt.date <= end_date
+        )
+    ).group_by(ReceiptProduct.product_type).order_by(func.sum(ReceiptProduct.price * ReceiptProduct.quantity).desc()).limit(5).all()
+
+    top_categories = [
+        {"category": category, "amount": float(total)}
+        for category, total in category_totals
+    ]
+
+    return SpendingSummary(
+        period="month",
+        start_date=start_date,
+        end_date=end_date,
+        total_spent=total_spent,
+        receipt_count=receipt_count,
+        average_per_receipt=average_per_receipt,
+        top_categories=top_categories
+    )
 
 
 @router.get("/spending/summary", response_model=SpendingSummary)
@@ -367,3 +411,51 @@ def get_spending_summary(
         average_per_receipt=average_per_receipt,
         top_categories=top_categories
     )
+
+
+@router.get("/{receipt_id}", response_model=ReceiptSchema)
+def get_receipt(
+    receipt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get specific receipt details"""
+    receipt = db.query(Receipt).filter(
+        and_(Receipt.id == receipt_id, Receipt.user_id == current_user.id)
+    ).first()
+
+    if not receipt:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Receipt not found"
+        )
+
+    return receipt
+
+
+@router.delete("/{receipt_id}")
+def delete_receipt(
+    receipt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete a receipt"""
+    receipt = db.query(Receipt).filter(
+        and_(Receipt.id == receipt_id, Receipt.user_id == current_user.id)
+    ).first()
+
+    if not receipt:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Receipt not found"
+        )
+
+    # Delete associated receipt products first
+    db.query(ReceiptProduct).filter(
+        ReceiptProduct.receipt_id == receipt_id).delete()
+
+    # Delete the receipt
+    db.delete(receipt)
+    db.commit()
+
+    return {"message": "Receipt deleted successfully"}

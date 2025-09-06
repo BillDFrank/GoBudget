@@ -2,6 +2,7 @@ import AdminLayout from '../layout/AdminLayout';
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/auth';
 import { useRouter } from 'next/router';
+import { formatCurrency, formatDate } from '../utils/formatting';
 
 // API configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
@@ -74,7 +75,7 @@ export default function Supermarket() {
     if (isAuthenticated) {
       loadData();
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, selectedMonth]); // Add selectedMonth dependency
 
   // Load receipts and spending summary
   const loadData = async () => {
@@ -115,17 +116,25 @@ export default function Supermarket() {
       const receiptsData = await receiptsResponse.json();
       setReceipts(receiptsData);
 
-      // Load spending summary for current month
-      const summaryResponse = await fetch(`${API_BASE_URL}/receipts/summary`, {
+      // Load spending summary for selected month
+      const [year, month] = selectedMonth.split('-');
+      console.log(`Loading summary for ${year}-${month}`);
+      
+      const summaryResponse = await fetch(`${API_BASE_URL}/receipts/summary?year=${year}&month=${parseInt(month)}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
 
+      console.log(`Summary response status: ${summaryResponse.status}`);
+      
       if (summaryResponse.ok) {
         const summaryData = await summaryResponse.json();
+        console.log('Summary data:', summaryData);
         setSpendingSummary(summaryData);
+      } else {
+        console.error('Summary response error:', await summaryResponse.text());
       }
 
     } catch (err) {
@@ -146,11 +155,7 @@ export default function Supermarket() {
 
     setIsUploading(true);
     setUploadProgress([]);
-
-    const formData = new FormData();
-    Array.from(files).forEach(file => {
-      formData.append('files', file);
-    });
+    setError(null);
 
     try {
       const token = localStorage.getItem('access_token');
@@ -159,27 +164,104 @@ export default function Supermarket() {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/receipts/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
+      const filesArray = Array.from(files);
+      const totalFiles = filesArray.length;
+      
+      setUploadProgress([`Starting upload of ${totalFiles} file(s)...`]);
 
-      if (!response.ok) {
-        throw new Error('Upload failed');
+      // Process files in batches to avoid overwhelming the server
+      const batchSize = Math.min(10, totalFiles); // Max 10 files per batch
+      const batches = [];
+      
+      for (let i = 0; i < filesArray.length; i += batchSize) {
+        batches.push(filesArray.slice(i, i + batchSize));
       }
 
-      const results = await response.json();
-      const messages = results.map((r: any) => r.message);
-      setUploadProgress(messages);
+      let successCount = 0;
+      let failureCount = 0;
+      let allResults = [];
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        setUploadProgress(prev => [...prev, `Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} files)...`]);
+
+        const formData = new FormData();
+        batch.forEach(file => {
+          formData.append('files', file);
+        });
+
+        // Create AbortController for timeout handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, 180000); // 3 minutes per batch
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/receipts/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+          }
+
+          const results = await response.json();
+          allResults.push(...results);
+
+          const batchSuccessCount = results.filter((r: any) => r.success).length;
+          const batchFailureCount = results.filter((r: any) => !r.success).length;
+          
+          successCount += batchSuccessCount;
+          failureCount += batchFailureCount;
+
+          setUploadProgress(prev => [...prev, 
+            `Batch ${batchIndex + 1} complete: ${batchSuccessCount} success, ${batchFailureCount} failed`
+          ]);
+
+        } catch (batchError) {
+          console.error(`Batch ${batchIndex + 1} error:`, batchError);
+          failureCount += batch.length;
+          setUploadProgress(prev => [...prev, 
+            `❌ Batch ${batchIndex + 1} failed: ${batchError instanceof Error ? batchError.message : 'Unknown error'}`
+          ]);
+        }
+      }
+
+      // Final summary
+      setUploadProgress(prev => [...prev, 
+        `\n📊 Final Results: ${successCount} successful, ${failureCount} failed out of ${totalFiles} total`
+      ]);
+
+      // Show individual results for failed files
+      const failedResults = allResults.filter((r: any) => !r.success);
+      if (failedResults.length > 0) {
+        setUploadProgress(prev => [...prev, '\n❌ Failed files:']);
+        failedResults.forEach((result: any) => {
+          setUploadProgress(prev => [...prev, `  • ${result.message}`]);
+        });
+      }
 
       // Reload data after successful upload
-      await loadData();
+      if (successCount > 0) {
+        await loadData();
+      }
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      console.error('Upload error:', err);
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Upload timed out. Please try with fewer files or check your connection.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Upload failed');
+      }
+      setUploadProgress(prev => [...prev, `❌ Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`]);
     } finally {
       setIsUploading(false);
     }
@@ -215,21 +297,56 @@ export default function Supermarket() {
         return;
       }
 
-      // Note: You'll need to implement delete endpoint in backend
+      const failedDeletions: Array<{id: number, status: number, message: string}> = [];
+      let successCount = 0;
+      let detailedErrors: string[] = [];
+
+      // Delete each selected receipt
       for (const receiptId of selectedReceipts) {
-        await fetch(`${API_BASE_URL}/receipts/${receiptId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        try {
+          const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (!response.ok) {
+            let errorText = 'Unknown error';
+            try {
+              const errorData = await response.json();
+              errorText = typeof errorData === 'string' ? errorData : errorData.detail || errorData.message || errorText;
+            } catch (jsonError) {
+              errorText = await response.text();
+            }
+            
+            console.error(`Failed to delete receipt ${receiptId}: HTTP ${response.status} - ${errorText}`);
+            failedDeletions.push({id: receiptId, status: response.status, message: errorText});
+            detailedErrors.push(`Receipt ${receiptId}: ${response.status} - ${errorText}`);
+          } else {
+            successCount++;
+            console.log(`Successfully deleted receipt ${receiptId}`);
+          }
+        } catch (deleteError) {
+          console.error(`Network error deleting receipt ${receiptId}:`, deleteError);
+          failedDeletions.push({id: receiptId, status: 0, message: deleteError instanceof Error ? deleteError.message : 'Network error'});
+          detailedErrors.push(`Receipt ${receiptId}: Network error`);
+        }
       }
 
-      setSelectedReceipts([]);
-      await loadData();
+      if (failedDeletions.length > 0) {
+        const errorSummary = `Failed to delete ${failedDeletions.length} receipt(s). ${successCount} deleted successfully.\n\nErrors:\n${detailedErrors.join('\n')}`;
+        console.error('Delete errors summary:', errorSummary);
+        setError(errorSummary);
+      } else {
+        setSelectedReceipts([]);
+        await loadData();
+        console.log('All receipts deleted successfully');
+      }
     } catch (err) {
-      setError('Failed to delete receipts');
+      console.error('Unexpected error in delete operation:', err);
+      setError('Failed to delete receipts. Please check your connection and try again.');
     }
   };
 
@@ -259,23 +376,6 @@ export default function Supermarket() {
     } catch (err) {
       setError('Failed to load receipt details');
     }
-  };
-
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   if (loading) {
@@ -309,16 +409,40 @@ export default function Supermarket() {
           </div>
         )}
 
+        {/* Month Selection */}
+        <div className="card mb-6">
+          <div className="card-content">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Spending Overview</h3>
+                <p className="text-sm text-gray-600">View your grocery expenses by month</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <label htmlFor="month-select" className="text-sm font-medium text-gray-700">
+                  Month:
+                </label>
+                <input
+                  id="month-select"
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Monthly Summary */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  This Month Total
+                  {new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} Total
                 </p>
                 <p className="text-2xl font-bold text-green-600">
-                  {spendingSummary ? formatCurrency(spendingSummary.total_spent) : '$0.00'}
+                  {spendingSummary ? formatCurrency(spendingSummary.total_spent) : '€0,00'}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -354,7 +478,7 @@ export default function Supermarket() {
                   Average per Receipt
                 </p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {spendingSummary ? formatCurrency(spendingSummary.average_per_receipt) : '$0.00'}
+                  {spendingSummary ? formatCurrency(spendingSummary.average_per_receipt) : '€0,00'}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -404,19 +528,29 @@ export default function Supermarket() {
             </div>
 
             {uploadProgress.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {uploadProgress.map((message, index) => (
-                  <div
-                    key={index}
-                    className={`text-sm p-2 rounded ${
-                      message.includes('successfully') || message.includes('success')
-                        ? 'bg-green-50 text-green-700'
-                        : 'bg-red-50 text-red-700'
-                    }`}
-                  >
-                    {message}
-                  </div>
-                ))}
+              <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
+                {uploadProgress.map((message, index) => {
+                  let bgColor = 'bg-blue-50 text-blue-700'; // default
+                  
+                  if (message.includes('successfully') || message.includes('success') || message.includes('✅')) {
+                    bgColor = 'bg-green-50 text-green-700';
+                  } else if (message.includes('failed') || message.includes('error') || message.includes('❌')) {
+                    bgColor = 'bg-red-50 text-red-700';
+                  } else if (message.includes('Processing') || message.includes('Starting')) {
+                    bgColor = 'bg-yellow-50 text-yellow-700';
+                  } else if (message.includes('📊') || message.includes('Final Results')) {
+                    bgColor = 'bg-purple-50 text-purple-700 font-semibold';
+                  }
+                  
+                  return (
+                    <div
+                      key={index}
+                      className={`text-sm p-3 rounded-lg ${bgColor} whitespace-pre-wrap`}
+                    >
+                      {message}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -468,9 +602,9 @@ export default function Supermarket() {
                 <p className="text-gray-600">Upload your first PDF receipt to get started</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
                 <table className="w-full text-sm text-left text-gray-500">
-                  <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                  <thead className="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0 z-10">
                     <tr>
                       <th scope="col" className="px-4 py-3">
                         <input

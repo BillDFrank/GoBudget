@@ -18,7 +18,7 @@ const AppHeader: React.FC = () => {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 h-16">
+    <header className="bg-white border-b border-gray-200 h-16 shadow-sm">
       <div className="flex items-center justify-between h-full px-4 lg:px-6">
         
         {/* Left side - Toggle button and mobile logo */}

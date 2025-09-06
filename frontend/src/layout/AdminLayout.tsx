@@ -14,7 +14,7 @@ export default function AdminLayout({
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Sidebar and Backdrop */}
       <AppSidebar />
       <Backdrop />
@@ -24,10 +24,12 @@ export default function AdminLayout({
         {/* Header */}
         <AppHeader />
         
-        {/* Main Content Area */}
-        <div className="flex-1 p-4 mx-auto max-w-7xl md:p-6 w-full">
-          {children}
-        </div>
+        {/* Main Content Area - scrollable content */}
+        <main className="flex-1 overflow-y-auto p-4 mx-auto max-w-7xl md:p-6 w-full lg:ml-0">
+          <div className="page-container">
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   );
