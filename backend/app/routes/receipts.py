@@ -16,8 +16,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Debug endpoint to test connection without auth
+
+
+@router.get("/debug")
+async def debug_receipts():
+    """Debug endpoint to test receipts connection"""
+    return {
+        "status": "receipts endpoint working",
+        "timestamp": datetime.now().isoformat()
+    }
+
 # PDF extraction API endpoint
 PDF_EXTRACTOR_URL = "http://91.98.45.199:8000/extract-batch"
+
 
 @router.post("/upload", response_model=List[ReceiptUploadResponse])
 async def upload_receipts(
@@ -48,7 +60,8 @@ async def upload_receipts(
                 'content': content,
                 'size': len(content)
             })
-            logger.info(f"Read file: {file.filename}, size: {len(content)} bytes")
+            logger.info(
+                f"Read file: {file.filename}, size: {len(content)} bytes")
         except Exception as e:
             logger.error(f"Failed to read file {file.filename}: {str(e)}")
             results.append(ReceiptUploadResponse(
@@ -60,11 +73,13 @@ async def upload_receipts(
     # Prepare multipart form data for all files
     files_data = []
     for file_info in file_contents:
-        files_data.append(('files', (file_info['filename'], file_info['content'], 'application/pdf')))
+        files_data.append(
+            ('files', (file_info['filename'], file_info['content'], 'application/pdf')))
         logger.info(f"Prepared file for upload: {file_info['filename']}")
 
     # Call the PDF extraction API with all files at once
-    logger.info(f"Calling PDF extraction API: {PDF_EXTRACTOR_URL} with {len(files_data)} files")
+    logger.info(
+        f"Calling PDF extraction API: {PDF_EXTRACTOR_URL} with {len(files_data)} files")
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(PDF_EXTRACTOR_URL, files=files_data)
@@ -72,7 +87,8 @@ async def upload_receipts(
             logger.info(f"API response headers: {dict(response.headers)}")
 
             if response.status_code != 200:
-                logger.error(f"API returned status {response.status_code}: {response.text}")
+                logger.error(
+                    f"API returned status {response.status_code}: {response.text}")
                 # Mark all files as failed
                 for file_info in file_contents:
                     results.append(ReceiptUploadResponse(
@@ -124,13 +140,15 @@ async def upload_receipts(
 
     # Process each result
     for i, result in enumerate(api_results):
-        filename = file_contents[i]['filename'] if i < len(file_contents) else f"file_{i+1}"
+        filename = file_contents[i]['filename'] if i < len(
+            file_contents) else f"file_{i+1}"
         logger.info(f"Processing result {i+1} for file: {filename}")
 
         try:
             if not result.get("success"):
                 error_msg = result.get('error_message', 'Unknown error')
-                logger.warning(f"Extraction failed for {filename}: {error_msg}")
+                logger.warning(
+                    f"Extraction failed for {filename}: {error_msg}")
                 results.append(ReceiptUploadResponse(
                     success=False,
                     message=f"Extraction failed for {filename}: {error_msg}",
@@ -139,13 +157,16 @@ async def upload_receipts(
                 continue
 
             receipt_data = result.get("receipt", {})
-            logger.info(f"Extracted receipt data for {filename}: {receipt_data}")
+            logger.info(
+                f"Extracted receipt data for {filename}: {receipt_data}")
 
             # Validate extracted data
             required_keys = ["market", "branch", "total", "date", "products"]
             if not all(key in receipt_data for key in required_keys):
-                missing_keys = [key for key in required_keys if key not in receipt_data]
-                logger.warning(f"Missing required data for {filename}: {missing_keys}")
+                missing_keys = [
+                    key for key in required_keys if key not in receipt_data]
+                logger.warning(
+                    f"Missing required data for {filename}: {missing_keys}")
                 results.append(ReceiptUploadResponse(
                     success=False,
                     message=f"Incomplete receipt data extracted from {filename}. Missing: {missing_keys}",
@@ -155,18 +176,38 @@ async def upload_receipts(
 
             # Parse date - handle different date formats
             try:
-                # Try DD/MM/YYYY format first (from API example)
-                if "/" in receipt_data["date"]:
-                    receipt_date = datetime.strptime(receipt_data["date"], "%d/%m/%Y").date()
-                else:
-                    # Fallback to YYYY-MM-DD format
-                    receipt_date = datetime.strptime(receipt_data["date"], "%Y-%m-%d").date()
-                logger.info(f"Parsed date for {filename}: {receipt_date}")
+                date_str = receipt_data["date"]
+                receipt_date = None
+
+                # Try different date formats
+                date_formats = [
+                    "%d/%m/%Y",    # DD/MM/YYYY (forward slashes)
+                    "%d-%m-%Y",    # DD-MM-YYYY (hyphens)
+                    "%Y-%m-%d",    # YYYY-MM-DD (ISO format)
+                    "%m/%d/%Y",    # MM/DD/YYYY (US format)
+                    "%m-%d-%Y"     # MM-DD-YYYY (US format with hyphens)
+                ]
+
+                for date_format in date_formats:
+                    try:
+                        receipt_date = datetime.strptime(
+                            date_str, date_format).date()
+                        logger.info(
+                            f"Successfully parsed date '{date_str}' using format '{date_format}' for {filename}")
+                        break
+                    except ValueError:
+                        continue
+
+                if receipt_date is None:
+                    raise ValueError(
+                        f"Date '{date_str}' doesn't match any supported format")
+
             except ValueError as e:
-                logger.error(f"Invalid date format for {filename}: {receipt_data['date']}")
+                logger.error(
+                    f"Invalid date format for {filename}: {receipt_data['date']} - {str(e)}")
                 results.append(ReceiptUploadResponse(
                     success=False,
-                    message=f"Invalid date format in extracted data for {filename}: {receipt_data['date']}",
+                    message=f"Invalid date format in extracted data for {filename}: {receipt_data['date']}. Supported formats: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD",
                     extracted_data=receipt_data
                 ))
                 continue
@@ -183,7 +224,8 @@ async def upload_receipts(
 
             db.add(db_receipt)
             db.flush()  # Get the receipt ID
-            logger.info(f"Created receipt with ID: {db_receipt.id} for {filename}")
+            logger.info(
+                f"Created receipt with ID: {db_receipt.id} for {filename}")
 
             # Create receipt products
             for product_data in receipt_data["products"]:
@@ -201,7 +243,8 @@ async def upload_receipts(
                     receipt_id=db_receipt.id
                 )
                 db.add(db_product)
-                logger.info(f"Created product for {filename}: {product_data['product']}")
+                logger.info(
+                    f"Created product for {filename}: {product_data['product']}")
 
             db.commit()
             db.refresh(db_receipt)
@@ -223,8 +266,10 @@ async def upload_receipts(
                 extracted_data=None
             ))
 
-    logger.info(f"Batch processing complete. Results: {len([r for r in results if r.success])} successful, {len([r for r in results if not r.success])} failed")
+    logger.info(
+        f"Batch processing complete. Results: {len([r for r in results if r.success])} successful, {len([r for r in results if not r.success])} failed")
     return results
+
 
 @router.get("/", response_model=List[ReceiptSchema])
 def get_receipts(
@@ -234,8 +279,10 @@ def get_receipts(
     current_user: User = Depends(get_current_user)
 ):
     """Get user's receipts"""
-    receipts = db.query(Receipt).filter(Receipt.user_id == current_user.id).offset(skip).limit(limit).all()
+    receipts = db.query(Receipt).filter(Receipt.user_id ==
+                                        current_user.id).offset(skip).limit(limit).all()
     return receipts
+
 
 @router.get("/{receipt_id}", response_model=ReceiptSchema)
 def get_receipt(
@@ -256,6 +303,7 @@ def get_receipt(
 
     return receipt
 
+
 @router.get("/spending/summary", response_model=SpendingSummary)
 def get_spending_summary(
     period: str = "month",  # "week" or "month"
@@ -272,7 +320,8 @@ def get_spending_summary(
     elif period == "month":
         # Get start of current month
         start_date = today.replace(day=1)
-        end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        end_date = (start_date + timedelta(days=32)
+                    ).replace(day=1) - timedelta(days=1)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
