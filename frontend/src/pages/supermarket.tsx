@@ -404,13 +404,6 @@ export default function Supermarket() {
   return (
     <AdminLayout>
       <div className="page-container">
-        <div className="page-header">
-          <h1 className="page-title">Supermarket</h1>
-          <p className="page-subtitle">
-            Track grocery spending and manage receipts
-          </p>
-        </div>
-
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
             {error}

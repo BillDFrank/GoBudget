@@ -26,11 +26,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(transactions.router,
-                   prefix="/transactions", tags=["transactions"])
-app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
-app.include_router(receipts.router, prefix="/receipts", tags=["receipts"])
+                   prefix="/api/transactions", tags=["transactions"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(receipts.router, prefix="/api/receipts", tags=["receipts"])
 
 
 @app.get("/")
