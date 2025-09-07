@@ -13,7 +13,8 @@ except Exception as e:
     print(f"Warning: Could not create database tables: {e}")
     print("Tables will be created when database becomes available")
 
-app = FastAPI(title="Go Budget", version="1.0.0", docs_url="/api/docs", redoc_url="/api/redoc")
+app = FastAPI(title="Go Budget", version="1.0.0",
+              docs_url="/api/docs", redoc_url="/api/redoc")
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,7 +31,8 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(transactions.router,
                    prefix="/api/transactions", tags=["transactions"])
-app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(
+    dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(receipts.router, prefix="/api/receipts", tags=["receipts"])
 
 
@@ -43,6 +45,7 @@ def read_root():
 def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
+
 @app.get("/api/health/db")
 def db_health_check(db: Session = Depends(get_db)):
     try:
@@ -52,6 +55,7 @@ def db_health_check(db: Session = Depends(get_db)):
         return {"status": "database healthy", "timestamp": datetime.now().isoformat()}
     except Exception as e:
         return {"status": "database error", "error": str(e), "timestamp": datetime.now().isoformat()}
+
 
 @app.get("/api/debug/users")
 def debug_users(db: Session = Depends(get_db)):
