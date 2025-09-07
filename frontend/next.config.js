@@ -11,7 +11,7 @@ const nextConfig = {
   distDir: '.next',
   poweredByHeader: false,
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://91.98.45.199:8001/api',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://gobudget.duckdns.org/api',
   }
 }
 
