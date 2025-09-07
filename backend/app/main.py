@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from .database import engine
+from sqlalchemy.orm import Session
+from .database import engine, get_db
 from . import models
 from .routes import auth, transactions, dashboard, receipts
 
@@ -41,3 +42,25 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+@app.get("/api/health/db")
+def db_health_check(db: Session = Depends(get_db)):
+    try:
+        # Try to execute a simple query
+        result = db.execute("SELECT 1")
+        return {"status": "database healthy", "timestamp": datetime.now().isoformat()}
+    except Exception as e:
+        return {"status": "database error", "error": str(e), "timestamp": datetime.now().isoformat()}
+
+@app.get("/api/debug/users")
+def debug_users(db: Session = Depends(get_db)):
+    try:
+        user_count = db.query(models.User).count()
+        users = db.query(models.User).all()
+        return {
+            "user_count": user_count,
+            "users": [{"id": u.id, "username": u.username} for u in users],
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {"error": str(e), "timestamp": datetime.now().isoformat()}
