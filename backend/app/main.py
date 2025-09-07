@@ -13,7 +13,7 @@ except Exception as e:
     print(f"Warning: Could not create database tables: {e}")
     print("Tables will be created when database becomes available")
 
-app = FastAPI(title="Go Budget", version="1.0.0")
+app = FastAPI(title="Go Budget", version="1.0.0", docs_url="/api/docs", redoc_url="/api/redoc")
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,8 +46,9 @@ def health_check():
 @app.get("/api/health/db")
 def db_health_check(db: Session = Depends(get_db)):
     try:
-        # Try to execute a simple query
-        result = db.execute("SELECT 1")
+        # Try to execute a simple query with proper text() declaration
+        from sqlalchemy import text
+        result = db.execute(text("SELECT 1"))
         return {"status": "database healthy", "timestamp": datetime.now().isoformat()}
     except Exception as e:
         return {"status": "database error", "error": str(e), "timestamp": datetime.now().isoformat()}
