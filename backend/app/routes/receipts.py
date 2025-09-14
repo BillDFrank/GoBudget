@@ -7,7 +7,7 @@ import httpx
 import logging
 from ..database import get_db, SessionLocal
 from ..models import Receipt, ReceiptProduct, User
-from ..schemas import Receipt as ReceiptSchema, ReceiptUploadResponse, SpendingSummary
+from ..schemas import Receipt as ReceiptSchema, ReceiptUploadResponse, SpendingSummary, PaginatedReceipts
 from .auth import get_current_user
 
 # Set up logging
@@ -260,17 +260,44 @@ async def upload_receipts(
     return results
 
 
-@router.get("/", response_model=List[ReceiptSchema])
+@router.get("/", response_model=PaginatedReceipts)
 def get_receipts(
-    skip: int = 0,
-    limit: int = 100,
+    page: int = 1,
+    per_page: int = 25,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get user's receipts"""
-    receipts = db.query(Receipt).options(selectinload(Receipt.products)).filter(Receipt.user_id ==
-                                                                                current_user.id).offset(skip).limit(limit).all()
-    return receipts
+    """Get user's receipts with pagination"""
+    # Ensure page and per_page are valid
+    page = max(1, page)
+    per_page = min(max(1, per_page), 100)  # Max 100 items per page
+
+    # Calculate offset
+    skip = (page - 1) * per_page
+
+    # Get total count
+    total = db.query(Receipt).filter(
+        Receipt.user_id == current_user.id).count()
+
+    # Get receipts for current page
+    receipts = db.query(Receipt).options(selectinload(Receipt.products)).filter(
+        Receipt.user_id == current_user.id
+    ).order_by(Receipt.date.desc()).offset(skip).limit(per_page).all()
+
+    # Calculate pagination metadata
+    pages = (total + per_page - 1) // per_page  # Ceiling division
+    has_next = page < pages
+    has_prev = page > 1
+
+    return PaginatedReceipts(
+        items=receipts,
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+        has_next=has_next,
+        has_prev=has_prev
+    )
 
 
 @router.get("/summary", response_model=SpendingSummary)
@@ -650,7 +677,8 @@ async def process_pdf_batch(
         for pdf_data in pdf_batch:
             filename = pdf_data['filename']
             if filename in processed_filenames:
-                logger.info(f"Safety check: skipping duplicate file: {filename}")
+                logger.info(
+                    f"Safety check: skipping duplicate file: {filename}")
                 skipped_results.append(ReceiptUploadResponse(
                     success=False,
                     message=f"Receipt {filename} has already been processed",
@@ -663,7 +691,8 @@ async def process_pdf_batch(
             logger.info("All PDFs in batch have already been processed")
             return skipped_results
 
-        logger.info(f"Processing {len(new_pdfs)} PDFs (safety check skipped {len(skipped_results)} duplicates)")
+        logger.info(
+            f"Processing {len(new_pdfs)} PDFs (safety check skipped {len(skipped_results)} duplicates)")
 
         # Prepare multipart form data for new files only
         files_data = []

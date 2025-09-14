@@ -2,17 +2,21 @@ from pydantic import BaseModel
 from datetime import date
 from typing import Optional, List
 
+
 class UserBase(BaseModel):
     username: str
 
+
 class UserCreate(UserBase):
     password: str
+
 
 class User(UserBase):
     id: int
 
     class Config:
         from_attributes = True
+
 
 class TransactionBase(BaseModel):
     date: date
@@ -22,8 +26,10 @@ class TransactionBase(BaseModel):
     description: str
     amount: float
 
+
 class TransactionCreate(TransactionBase):
     pass
+
 
 class Transaction(TransactionBase):
     id: int
@@ -31,6 +37,7 @@ class Transaction(TransactionBase):
 
     class Config:
         from_attributes = True
+
 
 class ReceiptProductBase(BaseModel):
     product_type: str
@@ -40,8 +47,10 @@ class ReceiptProductBase(BaseModel):
     discount: Optional[float] = 0
     discount2: Optional[float] = 0
 
+
 class ReceiptProductCreate(ReceiptProductBase):
     pass
+
 
 class ReceiptProduct(ReceiptProductBase):
     id: int
@@ -50,6 +59,7 @@ class ReceiptProduct(ReceiptProductBase):
     class Config:
         from_attributes = True
 
+
 class ReceiptBase(BaseModel):
     market: str
     branch: str
@@ -57,8 +67,10 @@ class ReceiptBase(BaseModel):
     date: date
     total: float
 
+
 class ReceiptCreate(ReceiptBase):
     products: List[ReceiptProductCreate]
+
 
 class Receipt(ReceiptBase):
     id: int
@@ -68,11 +80,13 @@ class Receipt(ReceiptBase):
     class Config:
         from_attributes = True
 
+
 class ReceiptUploadResponse(BaseModel):
     success: bool
     receipt_id: Optional[int] = None
     message: str
     extracted_data: Optional[dict] = None
+
 
 class SpendingSummary(BaseModel):
     period: str  # "week" or "month"
@@ -82,3 +96,13 @@ class SpendingSummary(BaseModel):
     receipt_count: int
     average_per_receipt: float
     top_categories: List[dict]  # [{"category": "Food", "amount": 100.50}, ...]
+
+
+class PaginatedReceipts(BaseModel):
+    items: List[Receipt]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+    has_next: bool
+    has_prev: bool

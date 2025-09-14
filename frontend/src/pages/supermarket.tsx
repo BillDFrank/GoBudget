@@ -20,6 +20,16 @@ interface Receipt {
   products?: ReceiptProduct[];
 }
 
+interface PaginatedReceipts {
+  items: Receipt[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
 interface ReceiptProduct {
   id: number;
   product_type: string;
@@ -45,6 +55,8 @@ export default function Supermarket() {
   const { isAuthenticated, user, checkAuth } = useAuthStore();
   const router = useRouter();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [paginationData, setPaginationData] = useState<PaginatedReceipts | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [spendingSummary, setSpendingSummary] = useState<SpendingSummary | null>(null);
   const [selectedReceipts, setSelectedReceipts] = useState<number[]>([]);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
@@ -81,7 +93,8 @@ export default function Supermarket() {
       return;
     }
     if (isAuthenticated) {
-      loadData();
+      setCurrentPage(1); // Reset to first page when data changes
+      loadData(1);
     }
   }, [isAuthenticated, router, selectedMonth]); // Add selectedMonth dependency
 
@@ -115,7 +128,7 @@ export default function Supermarket() {
   }, [loading]);
 
   // Load receipts and spending summary
-  const loadData = async () => {
+  const loadData = async (page: number = 1) => {
     if (!isAuthenticated) {
       setError('Please log in to view receipts');
       setLoading(false);
@@ -134,8 +147,8 @@ export default function Supermarket() {
         return;
       }
 
-      // Load receipts
-      const receiptsResponse = await fetch(`${API_BASE_URL}/receipts/`, {
+      // Load receipts with pagination
+      const receiptsResponse = await fetch(`${API_BASE_URL}/receipts/?page=${page}&per_page=25`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -151,8 +164,10 @@ export default function Supermarket() {
         throw new Error(`Failed to load receipts: ${receiptsResponse.statusText}`);
       }
 
-      const receiptsData = await receiptsResponse.json();
-      setReceipts(receiptsData);
+      const receiptsData: PaginatedReceipts = await receiptsResponse.json();
+      setReceipts(receiptsData.items);
+      setPaginationData(receiptsData);
+      setCurrentPage(page);
 
       // Load spending summary for selected month
       const [year, month] = selectedMonth.split('-');
@@ -208,7 +223,7 @@ export default function Supermarket() {
             clearInterval(progressInterval);
             if (progress.status === 'completed') {
               // Reload data after successful sync
-              await loadData();
+              await loadData(currentPage);
               setError(null);
             } else {
               setError(`Outlook sync failed: ${progress.current_step}`);
@@ -359,7 +374,7 @@ export default function Supermarket() {
 
       // Reload data after successful upload
       if (successCount > 0) {
-        await loadData();
+        await loadData(currentPage);
       }
 
     } catch (err) {
@@ -449,7 +464,7 @@ export default function Supermarket() {
         setError(errorSummary);
       } else {
         setSelectedReceipts([]);
-        await loadData();
+        await loadData(currentPage);
         console.log('All receipts deleted successfully');
       }
     } catch (err) {
@@ -492,6 +507,96 @@ export default function Supermarket() {
     return receipt.products.reduce((total, product) => {
       return total + (product.discount || 0) + (product.discount2 || 0);
     }, 0);
+  };
+
+  // Pagination functions
+  const handlePageChange = async (page: number) => {
+    if (page >= 1 && page <= (paginationData?.pages || 1)) {
+      setSelectedReceipts([]); // Clear selection when changing pages
+      await loadData(page);
+    }
+  };
+
+  const renderPagination = () => {
+    if (!paginationData || paginationData.pages <= 1) return null;
+
+    const pages = [];
+    const currentPage = paginationData.page;
+    const totalPages = paginationData.pages;
+
+    // Always show first page
+    if (currentPage > 3) {
+      pages.push(1);
+      if (currentPage > 4) {
+        pages.push('...');
+      }
+    }
+
+    // Show pages around current page
+    for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+      pages.push(i);
+    }
+
+    // Always show last page
+    if (currentPage < totalPages - 2) {
+      if (currentPage < totalPages - 3) {
+        pages.push('...');
+      }
+      pages.push(totalPages);
+    }
+
+    return (
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-t border-gray-200">
+        <div className="flex items-center text-sm text-gray-700">
+          <span>
+            Showing {Math.min((currentPage - 1) * paginationData.per_page + 1, paginationData.total)} to{' '}
+            {Math.min(currentPage * paginationData.per_page, paginationData.total)} of {paginationData.total} receipts
+          </span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={!paginationData.has_prev}
+            className={`px-3 py-1 text-sm rounded-md ${
+              paginationData.has_prev
+                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            Previous
+          </button>
+          
+          {pages.map((page, index) => (
+            <button
+              key={index}
+              onClick={() => typeof page === 'number' ? handlePageChange(page) : undefined}
+              disabled={page === '...'}
+              className={`px-3 py-1 text-sm rounded-md ${
+                page === currentPage
+                  ? 'bg-green-600 text-white'
+                  : page === '...'
+                  ? 'text-gray-400 cursor-default'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+          
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={!paginationData.has_next}
+            className={`px-3 py-1 text-sm rounded-md ${
+              paginationData.has_next
+                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -702,37 +807,44 @@ export default function Supermarket() {
 
         {/* Receipts Table */}
         <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Receipts</h2>
-            <div className="flex items-center gap-2">
-              {selectedReceipts.length > 0 && (
-                <>
-                  <span className="text-sm text-gray-600">
-                    {selectedReceipts.length} selected
-                  </span>
-                  <button
-                    onClick={deleteSelectedReceipts}
-                    className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
-                  >
-                    Delete Selected
-                  </button>
-                  <button
-                    onClick={clearSelection}
-                    className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors"
-                  >
-                    Clear Selection
-                  </button>
-                </>
-              )}
-              {receipts.length > 0 && selectedReceipts.length === 0 && (
-                <button
-                  onClick={selectAllReceipts}
-                  className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
-                >
-                  Select All
-                </button>
-              )}
+          <div className="card-header relative">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="card-title">Receipts</h2>
+                {paginationData && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    {paginationData.total} total receipts • Page {paginationData.page} of {paginationData.pages}
+                  </p>
+                )}
+              </div>
             </div>
+            {receipts.length > 0 && selectedReceipts.length === 0 && (
+              <button
+                onClick={selectAllReceipts}
+                className="absolute top-1/2 right-4 transform -translate-y-1/2 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+              >
+                Select All (Page)
+              </button>
+            )}
+            {selectedReceipts.length > 0 && (
+              <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex items-center gap-2">
+                <span className="text-sm text-gray-600">
+                  {selectedReceipts.length} selected
+                </span>
+                <button
+                  onClick={deleteSelectedReceipts}
+                  className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
+                >
+                  Delete Selected
+                </button>
+                <button
+                  onClick={clearSelection}
+                  className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors"
+                >
+                  Clear Selection
+                </button>
+              </div>
+            )}
           </div>
           <div className="card-content">
             {receipts.length === 0 ? (
@@ -821,6 +933,9 @@ export default function Supermarket() {
                 </table>
               </div>
             )}
+            
+            {/* Pagination */}
+            {renderPagination()}
           </div>
         </div>
 

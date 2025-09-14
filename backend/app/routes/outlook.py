@@ -263,8 +263,10 @@ async def check_and_download_pdf_attachments(token: str, message_id: str, email_
                     Receipt.user_id == user_id,
                     Receipt.filename.isnot(None)
                 ).all()
-                existing_filenames = {receipt.filename for receipt in existing_receipts}
-                logger.info(f"Found {len(existing_filenames)} existing receipts for user {user_id}")
+                existing_filenames = {
+                    receipt.filename for receipt in existing_receipts}
+                logger.info(
+                    f"Found {len(existing_filenames)} existing receipts for user {user_id}")
             except Exception as e:
                 logger.warning(f"Could not check existing filenames: {e}")
                 existing_filenames = set()
@@ -284,16 +286,19 @@ async def check_and_download_pdf_attachments(token: str, message_id: str, email_
                 if email_received_date:
                     try:
                         from datetime import datetime
-                        parsed_date = datetime.fromisoformat(email_received_date.replace('Z', '+00:00'))
+                        parsed_date = datetime.fromisoformat(
+                            email_received_date.replace('Z', '+00:00'))
                         datetime_str = parsed_date.strftime('%Y%m%d_%H%M%S')
                         unique_filename = f"{filename}_{datetime_str}"
                     except Exception as e:
-                        logger.warning(f"Could not parse email date {email_received_date}: {e}")
+                        logger.warning(
+                            f"Could not parse email date {email_received_date}: {e}")
                         unique_filename = filename
 
                 # Check if this PDF was already processed
                 if unique_filename in existing_filenames:
-                    logger.info(f"Skipping already processed PDF: {unique_filename}")
+                    logger.info(
+                        f"Skipping already processed PDF: {unique_filename}")
                     continue
 
                 # Only download if not already processed
@@ -306,9 +311,11 @@ async def check_and_download_pdf_attachments(token: str, message_id: str, email_
                         'filename': unique_filename,
                         'original_filename': filename
                     })
-                    logger.info(f"Downloaded new PDF: {filename} -> {unique_filename}")
+                    logger.info(
+                        f"Downloaded new PDF: {filename} -> {unique_filename}")
                 else:
-                    logger.error(f"Failed to download attachment: {attachment_response.text}")
+                    logger.error(
+                        f"Failed to download attachment: {attachment_response.text}")
 
         return pdf_contents
 
