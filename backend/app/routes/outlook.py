@@ -242,8 +242,79 @@ async def search_emails_from_sender(
         return results
 
 
+async def check_and_download_pdf_attachments(token: str, message_id: str, email_received_date: str = None, user_id: int = None, db: Session = None) -> List[bytes]:
+    """Check for existing PDFs and only download new ones"""
+    url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/attachments"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+        response.raise_for_status()
+
+        pdf_contents = []
+        all_attachments = response.json().get("value", [])
+
+        # Get existing filenames for this user to avoid duplicates
+        existing_filenames = set()
+        if db and user_id:
+            try:
+                from app.models import Receipt
+                existing_receipts = db.query(Receipt).filter(
+                    Receipt.user_id == user_id,
+                    Receipt.filename.isnot(None)
+                ).all()
+                existing_filenames = {receipt.filename for receipt in existing_receipts}
+                logger.info(f"Found {len(existing_filenames)} existing receipts for user {user_id}")
+            except Exception as e:
+                logger.warning(f"Could not check existing filenames: {e}")
+                existing_filenames = set()
+
+        for attachment in all_attachments:
+            # Check if it's a PDF file - either by content type or file extension
+            content_type = attachment.get("contentType", "")
+            filename = attachment.get("name", "")
+            is_pdf = (
+                content_type == "application/pdf" or
+                (content_type == "application/octet-stream" and filename.lower().endswith('.pdf'))
+            )
+
+            if is_pdf:
+                # Create unique filename to check against existing ones
+                unique_filename = filename
+                if email_received_date:
+                    try:
+                        from datetime import datetime
+                        parsed_date = datetime.fromisoformat(email_received_date.replace('Z', '+00:00'))
+                        datetime_str = parsed_date.strftime('%Y%m%d_%H%M%S')
+                        unique_filename = f"{filename}_{datetime_str}"
+                    except Exception as e:
+                        logger.warning(f"Could not parse email date {email_received_date}: {e}")
+                        unique_filename = filename
+
+                # Check if this PDF was already processed
+                if unique_filename in existing_filenames:
+                    logger.info(f"Skipping already processed PDF: {unique_filename}")
+                    continue
+
+                # Only download if not already processed
+                attachment_url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/attachments/{attachment['id']}/$value"
+                attachment_response = await client.get(attachment_url, headers=headers)
+
+                if attachment_response.status_code == 200:
+                    pdf_contents.append({
+                        'content': attachment_response.content,
+                        'filename': unique_filename,
+                        'original_filename': filename
+                    })
+                    logger.info(f"Downloaded new PDF: {filename} -> {unique_filename}")
+                else:
+                    logger.error(f"Failed to download attachment: {attachment_response.text}")
+
+        return pdf_contents
+
+
 async def download_pdf_attachments(token: str, message_id: str, email_received_date: str = None) -> List[bytes]:
-    """Download PDF attachments from an email"""
+    """Download PDF attachments from an email (legacy function for compatibility)"""
     url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/attachments"
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -390,14 +461,16 @@ async def sync_outlook_emails(current_user: User = Depends(get_current_user), db
 
                 # Process emails with attachments
                 for email in emails:
-                    # If email has attachments, collect PDFs
+                    # If email has attachments, collect PDFs (only download if not already processed)
                     if email.get("hasAttachments"):
                         try:
-                            # Download PDFs for batch processing
-                            pdf_attachments = await download_pdf_attachments(
+                            # Check and download only new PDFs
+                            pdf_attachments = await check_and_download_pdf_attachments(
                                 token,
                                 email["id"],
-                                email.get('receivedDateTime')
+                                email.get('receivedDateTime'),
+                                current_user.id,
+                                db
                             )
                             all_pdfs.extend(pdf_attachments)
 

@@ -630,29 +630,27 @@ async def process_pdf_batch(
     # Use a fresh database session for this batch to avoid transaction issues
     batch_db = SessionLocal()
     try:
-        # Check for already processed files to avoid duplicates
+        # Since we now check for duplicates before download, this should be minimal
+        # But we'll keep a safety check in case any duplicates slipped through
         processed_filenames = set()
         try:
-            # Try to query existing filenames - handle case where column doesn't exist yet
             for receipt in batch_db.query(Receipt).filter(
                 Receipt.user_id == current_user.id,
                 Receipt.filename.isnot(None)
             ).all():
                 processed_filenames.add(receipt.filename)
         except Exception as e:
-            # If filename column doesn't exist yet, just log and continue
-            logger.warning(
-                f"Could not check for existing filenames (possibly new schema): {str(e)}")
-            processed_filenames = set()  # Process all files
+            logger.warning(f"Could not check for existing filenames: {str(e)}")
+            processed_filenames = set()
 
-        # Filter out already processed PDFs
+        # Filter out any remaining duplicates (should be rare now)
         new_pdfs = []
         skipped_results = []
 
         for pdf_data in pdf_batch:
             filename = pdf_data['filename']
             if filename in processed_filenames:
-                logger.info(f"Skipping already processed file: {filename}")
+                logger.info(f"Safety check: skipping duplicate file: {filename}")
                 skipped_results.append(ReceiptUploadResponse(
                     success=False,
                     message=f"Receipt {filename} has already been processed",
@@ -665,8 +663,7 @@ async def process_pdf_batch(
             logger.info("All PDFs in batch have already been processed")
             return skipped_results
 
-        logger.info(
-            f"Processing {len(new_pdfs)} new PDFs (skipped {len(skipped_results)} duplicates)")
+        logger.info(f"Processing {len(new_pdfs)} PDFs (safety check skipped {len(skipped_results)} duplicates)")
 
         # Prepare multipart form data for new files only
         files_data = []
