@@ -15,6 +15,7 @@ dependencies = [
     "passlib[bcrypt]",
     "python-multipart",
     "psycopg2-binary",
-    "python-dotenv"
-    "httpx"
+    "python-dotenv",
+    "httpx",
+    "msal",
 ]

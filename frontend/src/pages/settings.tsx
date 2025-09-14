@@ -1,6 +1,160 @@
 import AdminLayout from '../layout/AdminLayout';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { outlookApi } from '../lib/api';
 
 export default function Settings() {
+  const router = useRouter();
+  const [outlookConnected, setOutlookConnected] = useState(false);
+  const [outlookStatus, setOutlookStatus] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [message, setMessage] = useState('');
+  const [showCodeInput, setShowCodeInput] = useState(false);
+  const [authCode, setAuthCode] = useState('');
+
+  useEffect(() => {
+    checkOutlookStatus();
+    
+    // Handle OAuth callback from Microsoft
+    if (router.query.code && router.query.state) {
+      console.log('OAuth callback detected:', { code: router.query.code, state: router.query.state });
+      handleOutlookCallback(router.query.code as string, router.query.state as string);
+    } else if (router.query.outlook_connected === 'true') {
+      setMessage('Outlook connected successfully!');
+      setOutlookConnected(true);
+      // Clean up URL
+      router.replace('/settings', undefined, { shallow: true });
+    } else if (router.query.outlook_error === 'true') {
+      setMessage('Failed to connect Outlook. Please try again.');
+      // Clean up URL
+      router.replace('/settings', undefined, { shallow: true });
+    }
+  }, [router.query]);
+
+  // Clear message after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  const checkOutlookStatus = async () => {
+    try {
+      const response = await outlookApi.getStatus();
+      setOutlookStatus(response.data);
+      setOutlookConnected(response.data.connected);
+    } catch (error) {
+      console.error('Failed to check Outlook status:', error);
+    }
+  };
+
+  const connectOutlook = async () => {
+    try {
+      const response = await outlookApi.getAuthUrl();
+      const authUrl = response.data.auth_url;
+      
+      // Store state for later verification
+      sessionStorage.setItem('outlook_oauth_state', response.data.state);
+      
+      // Open OAuth in a new tab
+      window.open(authUrl, '_blank');
+      
+      // Show instructions to the user
+      setMessage('Please complete the OAuth process in the new tab. After authorizing, copy the authorization code from the URL and paste it below.');
+      setShowCodeInput(true);
+      
+    } catch (error) {
+      console.error('Failed to get auth URL:', error);
+      setMessage('Failed to initiate Outlook connection. Please try again.');
+    }
+  };
+
+  const handleManualCodeSubmit = async () => {
+    try {
+      const state = sessionStorage.getItem('outlook_oauth_state');
+      if (!state) {
+        setMessage('OAuth state not found. Please restart the connection process.');
+        return;
+      }
+      
+      if (!authCode.trim()) {
+        setMessage('Please enter the authorization code.');
+        return;
+      }
+      
+      // Extract code from URL if user pasted the full URL
+      let code = authCode.trim();
+      if (code.includes('code=')) {
+        const urlParams = new URLSearchParams(code.split('?')[1] || code);
+        code = urlParams.get('code') || code;
+      }
+      
+      await handleOutlookCallback(code, state);
+      setShowCodeInput(false);
+      setAuthCode('');
+      sessionStorage.removeItem('outlook_oauth_state');
+      
+    } catch (error) {
+      console.error('Failed to submit authorization code:', error);
+      setMessage('Failed to process authorization code. Please try again.');
+    }
+  };
+
+  const handleOutlookCallback = async (code: string, state: string) => {
+    try {
+      console.log('Handling Outlook callback with code and state');
+      
+      // Send code and state to backend for token exchange
+      const response = await outlookApi.exchangeCode(code, state);
+      
+      console.log('Outlook callback response:', response.data);
+      
+      if (response.data.success) {
+        setMessage('Outlook connected successfully!');
+        setOutlookConnected(true);
+        await checkOutlookStatus(); // Refresh status
+        // Clean up URL
+        router.replace('/settings', undefined, { shallow: true });
+      } else {
+        throw new Error(response.data.message || 'Failed to complete Outlook authentication');
+      }
+    } catch (error) {
+      console.error('Failed to handle Outlook callback:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to connect Outlook. Please try again.';
+      setMessage(errorMessage);
+      // Clean up URL
+      router.replace('/settings', undefined, { shallow: true });
+    }
+  };
+
+  const syncOutlook = async () => {
+    setSyncing(true);
+    try {
+      const response = await outlookApi.sync();
+      setMessage(response.data.message);
+      // Refresh status after sync
+      await checkOutlookStatus();
+    } catch (error) {
+      console.error('Failed to sync Outlook:', error);
+      setMessage('Failed to sync Outlook emails');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const disconnectOutlook = async () => {
+    try {
+      await outlookApi.disconnect();
+      setOutlookConnected(false);
+      setOutlookStatus(null);
+      setMessage('Outlook disconnected successfully');
+    } catch (error) {
+      console.error('Failed to disconnect Outlook:', error);
+      setMessage('Failed to disconnect Outlook');
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="page-container">
@@ -10,6 +164,16 @@ export default function Settings() {
             Configure your application preferences and account settings
           </p>
         </div>
+
+        {message && (
+          <div className={`mb-6 p-4 rounded-lg ${
+            message.includes('successfully') 
+              ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' 
+              : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
+          }`}>
+            {message}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="card">
@@ -180,44 +344,98 @@ export default function Settings() {
 
           <div className="card">
             <div className="card-header">
-              <h2 className="card-title">Backup & Sync</h2>
+              <h2 className="card-title">Outlook Integration</h2>
             </div>
             <div className="card-content">
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Auto Backup
+                      Outlook Connection
                     </label>
-                    <p className="text-sm text-gray-500">Automatically backup your data</p>
+                    <p className="text-sm text-gray-500">
+                      {outlookConnected 
+                        ? "Connected to Outlook for automatic receipt processing" 
+                        : "Connect your Outlook account to automatically process receipts from emails"
+                      }
+                    </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                  </label>
+                  {outlookConnected ? (
+                    <div className="flex space-x-2">
+                      <button 
+                        onClick={syncOutlook}
+                        disabled={syncing}
+                        className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {syncing ? 'Syncing...' : 'Sync Now'}
+                      </button>
+                      <button 
+                        onClick={disconnectOutlook}
+                        className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={connectOutlook}
+                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      Connect Outlook
+                    </button>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Backup Frequency
-                  </label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                    <option>Daily</option>
-                    <option>Weekly</option>
-                    <option>Monthly</option>
-                  </select>
-                </div>
-
-                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-sm text-green-700 dark:text-green-400">
-                      Last backup: Today at 3:45 AM
-                    </span>
+                {showCodeInput && (
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <h4 className="font-medium text-yellow-800 mb-2">Complete Outlook Authorization</h4>
+                    <div className="text-sm text-yellow-700 mb-3">
+                      <p className="mb-2">After authorizing in the new tab, you'll be redirected to a page that starts with:</p>
+                      <code className="bg-yellow-100 px-2 py-1 rounded text-xs">
+                        https://login.microsoftonline.com/common/oauth2/nativeclient?code=...
+                      </code>
+                      <p className="mt-2">Copy the entire URL or just the <strong>code</strong> parameter value and paste it below:</p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <input
+                        type="text"
+                        value={authCode}
+                        onChange={(e) => setAuthCode(e.target.value)}
+                        placeholder="Paste authorization code or full URL here..."
+                        className="flex-1 px-3 py-2 border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                      />
+                      <button
+                        onClick={handleManualCodeSubmit}
+                        className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+                      >
+                        Submit
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowCodeInput(false);
+                          setAuthCode('');
+                          sessionStorage.removeItem('outlook_oauth_state');
+                        }}
+                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {outlookConnected && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-sm text-blue-700 dark:text-blue-400">
+                        Outlook connected successfully
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

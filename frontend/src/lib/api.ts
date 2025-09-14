@@ -8,7 +8,7 @@ const getApiBaseUrl = () => {
   }
   // If we're running in development (localhost), use localhost
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return 'http://localhost:8001';
+    return 'http://localhost:8001/api';
   }
   // If we're on the production domain, use the same domain with /api prefix
   if (typeof window !== 'undefined') {
@@ -59,3 +59,13 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// Outlook integration API functions
+export const outlookApi = {
+  getAuthUrl: () => api.get('/outlook/auth-url'),
+  getStatus: () => api.get('/outlook/status'),
+  exchangeCode: (code: string, state: string) => api.post('/outlook/exchange-code', { code, state }),
+  sync: () => api.post('/outlook/sync'),
+  getSyncProgress: () => api.get('/outlook/sync-progress'),
+  disconnect: () => api.post('/outlook/disconnect'),
+};

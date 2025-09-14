@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/auth';
 import { useRouter } from 'next/router';
 import { formatCurrency, formatDate } from '../utils/formatting';
+import { outlookApi } from '../lib/api';
 
 // API configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
@@ -53,6 +54,13 @@ export default function Supermarket() {
   const [uploadProgress, setUploadProgress] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{
+    status: string;
+    current_step: string;
+    total_steps: number;
+    completed_steps: number;
+  } | null>(null);
 
   // Check authentication on component mount
   useEffect(() => {
@@ -77,6 +85,35 @@ export default function Supermarket() {
     }
   }, [isAuthenticated, router, selectedMonth]); // Add selectedMonth dependency
 
+  // Check for Outlook connection and start sync
+  useEffect(() => {
+    console.log('Supermarket useEffect - outlook_connected check:', {
+      isAuthenticated,
+      query: router.query,
+      outlook_connected: router.query.outlook_connected
+    });
+
+    if (isAuthenticated && router.query.outlook_connected === 'true') {
+      console.log('Outlook connected detected, starting sync...');
+      // Clear the query parameter
+      router.replace('/supermarket', undefined, { shallow: true });
+      // Start Outlook sync
+      syncOutlookEmails();
+    }
+  }, [isAuthenticated, router.query]);
+
+  // Ensure loading state is cleared after a reasonable time
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        console.log('Loading timeout reached, clearing loading state');
+        setLoading(false);
+      }, 30000); // 30 seconds timeout
+
+      return () => clearTimeout(timeout);
+    }
+  }, [loading]);
+
   // Load receipts and spending summary
   const loadData = async () => {
     if (!isAuthenticated) {
@@ -87,6 +124,7 @@ export default function Supermarket() {
 
     try {
       setLoading(true);
+      setIsImporting(true);
       setError(null);
 
       const token = localStorage.getItem('access_token');
@@ -142,6 +180,76 @@ export default function Supermarket() {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+      setIsImporting(false);
+    }
+  };
+
+  // Sync Outlook emails and process receipts
+  const syncOutlookEmails = async () => {
+    try {
+      setIsImporting(true);
+      setError(null);
+      setSyncProgress({ status: 'starting', current_step: 'Initializing...', total_steps: 0, completed_steps: 0 });
+
+      console.log('Starting Outlook sync...');
+
+      // Start the sync process (no await - let it run in background)
+      const syncPromise = outlookApi.sync();
+      
+      // Poll for progress updates
+      const progressInterval = setInterval(async () => {
+        try {
+          const progressResponse = await outlookApi.getSyncProgress();
+          const progress = progressResponse.data;
+          setSyncProgress(progress);
+          
+          // Stop polling when sync is completed or errored
+          if (progress.status === 'completed' || progress.status === 'error') {
+            clearInterval(progressInterval);
+            if (progress.status === 'completed') {
+              // Reload data after successful sync
+              await loadData();
+              setError(null);
+            } else {
+              setError(`Outlook sync failed: ${progress.current_step}`);
+            }
+            setIsImporting(false);
+            setSyncProgress(null);
+          }
+        } catch (progressError) {
+          console.error('Error getting sync progress:', progressError);
+        }
+      }, 1000); // Poll every second
+
+      // Handle the main sync promise
+      try {
+        const response = await syncPromise;
+        console.log('Outlook sync response:', response.data);
+      } catch (syncError) {
+        console.error('Sync promise rejected:', syncError);
+        clearInterval(progressInterval);
+        const errorMessage = syncError instanceof Error ? syncError.message : 'Failed to sync Outlook emails';
+        setError(`Outlook sync failed: ${errorMessage}. You can still upload receipts manually.`);
+        setIsImporting(false);
+        setSyncProgress(null);
+      }
+
+      // Cleanup timeout
+      setTimeout(() => {
+        clearInterval(progressInterval);
+        if (isImporting) {
+          setError('Outlook sync timed out. You can still upload receipts manually.');
+          setIsImporting(false);
+          setSyncProgress(null);
+        }
+      }, 120000); // 2 minutes timeout
+
+    } catch (err) {
+      console.error('Error starting Outlook sync:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start Outlook sync';
+      setError(`Outlook sync failed: ${errorMessage}. You can still upload receipts manually.`);
+      setIsImporting(false);
+      setSyncProgress(null);
     }
   };
 
@@ -404,6 +512,41 @@ export default function Supermarket() {
   return (
     <AdminLayout>
       <div className="page-container">
+        {isImporting && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center">
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">
+                    {syncProgress?.current_step || 'Syncing Outlook emails and processing receipts...'}
+                  </span>
+                  {syncProgress && syncProgress.total_steps > 0 && (
+                    <span className="text-sm">
+                      {syncProgress.completed_steps}/{syncProgress.total_steps}
+                    </span>
+                  )}
+                </div>
+                {syncProgress && syncProgress.total_steps > 0 && (
+                  <div className="mt-2">
+                    <div className="w-full bg-blue-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ 
+                          width: `${(syncProgress.completed_steps / syncProgress.total_steps) * 100}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
             {error}

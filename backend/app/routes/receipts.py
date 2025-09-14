@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 from typing import List
 import httpx
 import logging
-from ..database import get_db
+from ..database import get_db, SessionLocal
 from ..models import Receipt, ReceiptProduct, User
 from ..schemas import Receipt as ReceiptSchema, ReceiptUploadResponse, SpendingSummary
 from .auth import get_current_user
@@ -15,17 +15,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Debug endpoint to test connection without auth
-
-
-@router.get("/debug")
-async def debug_receipts():
-    """Debug endpoint to test receipts connection"""
-    return {
-        "status": "receipts endpoint working",
-        "timestamp": datetime.now().isoformat()
-    }
 
 # PDF extraction API endpoint
 PDF_EXTRACTOR_URL = "http://91.98.45.199:8000/extract-batch"
@@ -280,7 +269,7 @@ def get_receipts(
 ):
     """Get user's receipts"""
     receipts = db.query(Receipt).options(selectinload(Receipt.products)).filter(Receipt.user_id ==
-                                        current_user.id).offset(skip).limit(limit).all()
+                                                                                current_user.id).offset(skip).limit(limit).all()
     return receipts
 
 
@@ -459,3 +448,415 @@ def delete_receipt(
     db.commit()
 
     return {"message": "Receipt deleted successfully"}
+
+
+async def process_pdf_content(
+    pdf_content: bytes,
+    filename: str,
+    db: Session,
+    current_user: User
+) -> ReceiptUploadResponse:
+    """Process a single PDF content and save to database"""
+    logger.info(f"Processing PDF: {filename}, size: {len(pdf_content)} bytes")
+
+    # Prepare multipart form data
+    files_data = [('files', (filename, pdf_content, 'application/pdf'))]
+
+    # Call the PDF extraction API
+    logger.info(f"Calling PDF extraction API: {PDF_EXTRACTOR_URL}")
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(PDF_EXTRACTOR_URL, files=files_data)
+            logger.info(f"API response status: {response.status_code}")
+
+            if response.status_code != 200:
+                logger.error(
+                    f"API returned status {response.status_code}: {response.text}")
+                return ReceiptUploadResponse(
+                    success=False,
+                    message=f"Failed to extract data from {filename}: API returned {response.status_code}",
+                    extracted_data=None
+                )
+
+            # Parse the response
+            extraction_result = response.json()
+            logger.info(f"Extraction result: {extraction_result}")
+
+            if not extraction_result.get("results"):
+                logger.warning("No results in extraction response")
+                return ReceiptUploadResponse(
+                    success=False,
+                    message=f"No data could be extracted from {filename}",
+                    extracted_data=None
+                )
+
+            api_results = extraction_result["results"]
+            if not api_results:
+                return ReceiptUploadResponse(
+                    success=False,
+                    message=f"No data could be extracted from {filename}",
+                    extracted_data=None
+                )
+
+            result = api_results[0]  # Only one file
+
+            if not result.get("success"):
+                error_msg = result.get('error_message', 'Unknown error')
+                logger.warning(
+                    f"Extraction failed for {filename}: {error_msg}")
+                return ReceiptUploadResponse(
+                    success=False,
+                    message=f"Extraction failed for {filename}: {error_msg}",
+                    extracted_data=None
+                )
+
+            receipt_data = result.get("receipt", {})
+            logger.info(
+                f"Extracted receipt data for {filename}: {receipt_data}")
+
+            # Validate extracted data
+            required_keys = ["market", "branch", "total", "date", "products"]
+            if not all(key in receipt_data for key in required_keys):
+                missing_keys = [
+                    key for key in required_keys if key not in receipt_data]
+                logger.warning(
+                    f"Missing required data for {filename}: {missing_keys}")
+                return ReceiptUploadResponse(
+                    success=False,
+                    message=f"Incomplete receipt data extracted from {filename}. Missing: {missing_keys}",
+                    extracted_data=receipt_data
+                )
+
+            # Parse date
+            try:
+                date_str = receipt_data["date"]
+                receipt_date = None
+                date_formats = [
+                    "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y"
+                ]
+
+                for date_format in date_formats:
+                    try:
+                        receipt_date = datetime.strptime(
+                            date_str, date_format).date()
+                        logger.info(
+                            f"Successfully parsed date '{date_str}' using format '{date_format}'")
+                        break
+                    except ValueError:
+                        continue
+
+                if receipt_date is None:
+                    raise ValueError(
+                        f"Date '{date_str}' doesn't match any supported format")
+
+            except ValueError as e:
+                logger.error(
+                    f"Invalid date format for {filename}: {receipt_data['date']} - {str(e)}")
+                return ReceiptUploadResponse(
+                    success=False,
+                    message=f"Invalid date format in extracted data for {filename}: {receipt_data['date']}",
+                    extracted_data=receipt_data
+                )
+
+            # Create receipt
+            db_receipt = Receipt(
+                market=receipt_data["market"],
+                branch=receipt_data["branch"],
+                invoice=receipt_data.get("invoice"),
+                date=receipt_date,
+                total=receipt_data["total"],
+                user_id=current_user.id
+            )
+
+            db.add(db_receipt)
+            db.flush()
+            logger.info(
+                f"Created receipt with ID: {db_receipt.id} for {filename}")
+
+            # Create receipt products
+            for product_data in receipt_data["products"]:
+                discount = product_data.get("discount") or 0
+                discount2 = product_data.get("discount2") or 0
+
+                db_product = ReceiptProduct(
+                    product_type=product_data["product_type"],
+                    product=product_data["product"],
+                    quantity=product_data["quantity"],
+                    price=product_data["price"],
+                    discount=discount,
+                    discount2=discount2,
+                    receipt_id=db_receipt.id
+                )
+                db.add(db_product)
+                logger.info(
+                    f"Created product for {filename}: {product_data['product']}")
+
+            db.commit()
+            db.refresh(db_receipt)
+            logger.info(f"Successfully processed receipt: {filename}")
+
+            return ReceiptUploadResponse(
+                success=True,
+                receipt_id=db_receipt.id,
+                message=f"Receipt {filename} uploaded and processed successfully",
+                extracted_data=receipt_data
+            )
+
+    except httpx.RequestError as e:
+        logger.error(f"Network error calling PDF extraction API: {str(e)}")
+        return ReceiptUploadResponse(
+            success=False,
+            message=f"Failed to connect to PDF extraction service for {filename}: {str(e)}",
+            extracted_data=None
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error processing {filename}: {str(e)}")
+        db.rollback()
+        return ReceiptUploadResponse(
+            success=False,
+            message=f"Failed to process receipt {filename}: {str(e)}",
+            extracted_data=None
+        )
+
+
+async def process_pdf_batch(
+    pdf_batch: List[dict],  # List of {'content': bytes, 'filename': str}
+    db: Session,
+    current_user: User
+) -> List[ReceiptUploadResponse]:
+    """Process a batch of PDFs together for better performance"""
+    logger.info(f"Processing batch of {len(pdf_batch)} PDFs")
+
+    # Use a fresh database session for this batch to avoid transaction issues
+    batch_db = SessionLocal()
+    try:
+        # Check for already processed files to avoid duplicates
+        processed_filenames = set()
+        try:
+            # Try to query existing filenames - handle case where column doesn't exist yet
+            for receipt in batch_db.query(Receipt).filter(
+                Receipt.user_id == current_user.id,
+                Receipt.filename.isnot(None)
+            ).all():
+                processed_filenames.add(receipt.filename)
+        except Exception as e:
+            # If filename column doesn't exist yet, just log and continue
+            logger.warning(
+                f"Could not check for existing filenames (possibly new schema): {str(e)}")
+            processed_filenames = set()  # Process all files
+
+        # Filter out already processed PDFs
+        new_pdfs = []
+        skipped_results = []
+
+        for pdf_data in pdf_batch:
+            filename = pdf_data['filename']
+            if filename in processed_filenames:
+                logger.info(f"Skipping already processed file: {filename}")
+                skipped_results.append(ReceiptUploadResponse(
+                    success=False,
+                    message=f"Receipt {filename} has already been processed",
+                    extracted_data=None
+                ))
+            else:
+                new_pdfs.append(pdf_data)
+
+        if not new_pdfs:
+            logger.info("All PDFs in batch have already been processed")
+            return skipped_results
+
+        logger.info(
+            f"Processing {len(new_pdfs)} new PDFs (skipped {len(skipped_results)} duplicates)")
+
+        # Prepare multipart form data for new files only
+        files_data = []
+        for pdf_data in new_pdfs:
+            # Use original filename for API call but track with unique filename internally
+            api_filename = pdf_data.get(
+                'original_filename', pdf_data['filename'])
+            # Ensure filename ends with .pdf for API
+            if not api_filename.lower().endswith('.pdf'):
+                api_filename += '.pdf'
+
+            files_data.append(
+                ('files', (api_filename,
+                 pdf_data['content'], 'application/pdf'))
+            )
+            logger.info(
+                f"Added to batch: {pdf_data['filename']}, size: {len(pdf_data['content'])} bytes")
+
+        # Call the PDF extraction API with the entire batch
+        logger.info(f"Calling PDF extraction API: {PDF_EXTRACTOR_URL}")
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(PDF_EXTRACTOR_URL, files=files_data)
+            logger.info(f"API response status: {response.status_code}")
+
+            if response.status_code != 200:
+                logger.error(
+                    f"API returned status {response.status_code}: {response.text}")
+                # Return failed responses for new files + skipped results
+                failed_results = [
+                    ReceiptUploadResponse(
+                        success=False,
+                        message=f"Failed to extract data from {pdf_data['filename']}: API returned {response.status_code}",
+                        extracted_data=None
+                    ) for pdf_data in new_pdfs
+                ]
+                return skipped_results + failed_results
+
+            # Parse the response
+            extraction_result = response.json()
+            logger.info(f"Extraction result: {extraction_result}")
+
+            if not extraction_result.get("results"):
+                logger.warning("No results in extraction response")
+                failed_results = [
+                    ReceiptUploadResponse(
+                        success=False,
+                        message=f"No data could be extracted from {pdf_data['filename']}",
+                        extracted_data=None
+                    ) for pdf_data in new_pdfs
+                ]
+                return skipped_results + failed_results
+
+            api_results = extraction_result["results"]
+            results = []
+
+            # Process each result and match it to the new files
+            for i, (pdf_data, result) in enumerate(zip(new_pdfs, api_results)):
+                filename = pdf_data['filename']
+
+                if not result.get("success"):
+                    error_msg = result.get('error_message', 'Unknown error')
+                    logger.warning(
+                        f"Extraction failed for {filename}: {error_msg}")
+                    results.append(ReceiptUploadResponse(
+                        success=False,
+                        message=f"Extraction failed for {filename}: {error_msg}",
+                        extracted_data=None
+                    ))
+                    continue
+
+                receipt_data = result.get("receipt")
+                if not receipt_data:
+                    logger.warning(f"No receipt data returned for {filename}")
+                    results.append(ReceiptUploadResponse(
+                        success=False,
+                        message=f"No receipt data found in {filename}",
+                        extracted_data=None
+                    ))
+                    continue
+
+                # Extract receipt data for this file
+                logger.info(
+                    f"Extracted receipt data for {filename}: {receipt_data}")
+
+                # Parse the date from various possible formats
+                date_str = receipt_data["date"]
+                receipt_date = None
+                for date_format in ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"]:
+                    try:
+                        receipt_date = datetime.strptime(
+                            date_str, date_format).date()
+                        logger.info(
+                            f"Successfully parsed date '{date_str}' using format '{date_format}'")
+                        break
+                    except ValueError:
+                        continue
+
+                if not receipt_date:
+                    logger.error(
+                        f"Could not parse date '{date_str}' for {filename}")
+                    results.append(ReceiptUploadResponse(
+                        success=False,
+                        message=f"Invalid date format in {filename}: {date_str}",
+                        extracted_data=None
+                    ))
+                    continue
+
+                # Create receipt record
+                try:
+                    db_receipt = Receipt(
+                        user_id=current_user.id,
+                        market=receipt_data["market"],
+                        branch=receipt_data["branch"],
+                        invoice=receipt_data["invoice"],
+                        total=receipt_data["total"],
+                        date=receipt_date,
+                        filename=filename
+                    )
+                except Exception as e:
+                    # Handle case where filename column doesn't exist yet
+                    logger.warning(
+                        f"Could not set filename (possibly old schema): {str(e)}")
+                    db_receipt = Receipt(
+                        user_id=current_user.id,
+                        market=receipt_data["market"],
+                        branch=receipt_data["branch"],
+                        invoice=receipt_data["invoice"],
+                        total=receipt_data["total"],
+                        date=receipt_date
+                    )
+
+                batch_db.add(db_receipt)
+                batch_db.flush()
+                logger.info(
+                    f"Created receipt with ID: {db_receipt.id} for {filename}")
+
+                # Create receipt products
+                for product_data in receipt_data["products"]:
+                    discount = product_data.get("discount") or 0
+                    discount2 = product_data.get("discount2") or 0
+
+                    db_product = ReceiptProduct(
+                        product_type=product_data["product_type"],
+                        product=product_data["product"],
+                        quantity=product_data["quantity"],
+                        price=product_data["price"],
+                        discount=discount,
+                        discount2=discount2,
+                        receipt_id=db_receipt.id
+                    )
+                    batch_db.add(db_product)
+                    logger.info(
+                        f"Created product for {filename}: {product_data['product']}")
+
+                results.append(ReceiptUploadResponse(
+                    success=True,
+                    receipt_id=db_receipt.id,
+                    message=f"Receipt {filename} uploaded and processed successfully",
+                    extracted_data=receipt_data
+                ))
+
+            # Commit all changes at once
+            batch_db.commit()
+            logger.info(
+                f"Successfully processed batch: {len([r for r in results if r.success])} successful, {len([r for r in results if not r.success])} failed")
+
+            # Combine skipped and processed results
+            return skipped_results + results
+
+    except httpx.RequestError as e:
+        logger.error(f"Network error calling PDF extraction API: {str(e)}")
+        batch_db.rollback()
+        failed_results = [
+            ReceiptUploadResponse(
+                success=False,
+                message=f"Failed to connect to PDF extraction service for {pdf_data['filename']}: {str(e)}",
+                extracted_data=None
+            ) for pdf_data in new_pdfs
+        ]
+        return skipped_results + failed_results
+    except Exception as e:
+        logger.error(f"Unexpected error processing batch: {str(e)}")
+        batch_db.rollback()
+        failed_results = [
+            ReceiptUploadResponse(
+                success=False,
+                message=f"Failed to process receipt {pdf_data['filename']}: {str(e)}",
+                extracted_data=None
+            ) for pdf_data in new_pdfs
+        ]
+        return skipped_results + failed_results
+    finally:
+        batch_db.close()

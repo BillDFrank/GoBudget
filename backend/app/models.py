@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from .database import Base
+
 
 class User(Base):
     __tablename__ = "users"
@@ -8,6 +9,12 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    outlook_access_token = Column(String, nullable=True)
+    outlook_refresh_token = Column(String, nullable=True)
+    outlook_token_expires = Column(DateTime, nullable=True)
+    outlook_state = Column(String, nullable=True)
+    outlook_last_sync = Column(DateTime, nullable=True)
+
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -23,6 +30,7 @@ class Transaction(Base):
 
     user = relationship("User")
 
+
 class Receipt(Base):
     __tablename__ = "receipts"
 
@@ -32,10 +40,14 @@ class Receipt(Base):
     invoice = Column(String)
     date = Column(Date, nullable=False)
     total = Column(Float, nullable=False)
+    # Prevent duplicate processing
+    filename = Column(String, nullable=True, unique=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     user = relationship("User")
-    products = relationship("ReceiptProduct", back_populates="receipt", cascade="all, delete-orphan")
+    products = relationship(
+        "ReceiptProduct", back_populates="receipt", cascade="all, delete-orphan")
+
 
 class ReceiptProduct(Base):
     __tablename__ = "receipt_products"

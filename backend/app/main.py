@@ -2,9 +2,15 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+import os
 from .database import engine, get_db
 from . import models
-from .routes import auth, transactions, dashboard, receipts
+from .routes import auth, transactions, dashboard, receipts, outlook
+
+# Load environment variables from .env file
+load_dotenv(dotenv_path=os.path.join(
+    os.path.dirname(__file__), '..', '..', '.env'))
 
 # Try to create tables, but don't fail if database is not available
 try:
@@ -34,6 +40,7 @@ app.include_router(transactions.router,
 app.include_router(
     dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(receipts.router, prefix="/api/receipts", tags=["receipts"])
+app.include_router(outlook.router, prefix="/api/outlook", tags=["outlook"])
 
 
 @app.get("/")

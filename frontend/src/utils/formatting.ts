@@ -8,7 +8,7 @@ export const formatCurrency = (amount: number): string => {
 
 // Date formatting utility
 export const formatDate = (dateString: string): string => {
-  return new Date(dateString).toLocaleDateString('de-DE', {
+  return new Date(dateString).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
