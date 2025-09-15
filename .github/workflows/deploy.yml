@@ -114,9 +114,15 @@ jobs:
             API_PORT=8000
 
             DOMAIN=gobudget.duckdns.org
+            COOKIE_DOMAIN=.gobudget.duckdns.org
 
             NEXT_PUBLIC_API_URL=https://gobudget.duckdns.org/api
             NEXT_PUBLIC_APP_URL=https://gobudget.duckdns.org
+
+            OUTLOOK_CLIENT_ID=${{ secrets.OUTLOOK_CLIENT_ID }}
+            OUTLOOK_CLIENT_SECRET=${{ secrets.OUTLOOK_CLIENT_SECRET }}
+            OUTLOOK_TENANT_ID=${{ secrets.OUTLOOK_TENANT_ID }}
+            OUTLOOK_REDIRECT_URI=${{ secrets.OUTLOOK_REDIRECT_URI }}
             EOF
 
             # Stop the services to update them
@@ -124,9 +130,13 @@ jobs:
             docker compose stop backend frontend 2>/dev/null || docker-compose stop backend frontend 2>/dev/null || true
             docker compose rm -f backend frontend 2>/dev/null || docker-compose rm -f backend frontend 2>/dev/null || true
 
+            # Remove old images to force fresh build
+            echo "Removing old images..."
+            docker image rm gobudget-frontend:latest gobudget-backend:latest 2>/dev/null || true
+
             # Build the services
             echo "Building services..."
-            docker compose build backend frontend || docker-compose build backend frontend
+            docker compose build --no-cache backend frontend || docker-compose build --no-cache backend frontend
 
             # Check if build was successful
             if [ $? -eq 0 ]; then
