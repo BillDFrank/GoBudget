@@ -4,13 +4,24 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 import os
+import logging
 from .database import engine, get_db
 from . import models
 from .routes import auth, transactions, dashboard, receipts, outlook
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Load environment variables from .env file
-load_dotenv(dotenv_path=os.path.join(
-    os.path.dirname(__file__), '..', '..', '.env'))
+env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+logger.info(f"Loading .env from: {env_path}")
+load_dotenv(dotenv_path=env_path)
+
+# Log key environment variables
+logger.info(f"DATABASE_URL: {os.getenv('DATABASE_URL')}")
+logger.info(f"API_HOST: {os.getenv('API_HOST')}")
+logger.info(f"API_PORT: {os.getenv('API_PORT')}")
+logger.info(f"JWT_SECRET: {'***' if os.getenv('JWT_SECRET') else 'NOT SET'}")
 
 # Try to create tables, but don't fail if database is not available
 try:
