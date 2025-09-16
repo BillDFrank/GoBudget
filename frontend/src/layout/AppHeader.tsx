@@ -1,13 +1,15 @@
 "use client";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuthStore } from "../store/auth";
+import { useRouter } from "next/router";
 import React, { useState } from "react";
 
 const AppHeader: React.FC = () => {
   const [isUserMenuOpen, setUserMenuOpen] = useState(false);
 
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
-  const { user } = useAuthStore();
+  const { logout, user } = useAuthStore();
+  const router = useRouter();
 
   const handleToggle = () => {
     if (window.innerWidth >= 1024) {
@@ -105,9 +107,15 @@ const AppHeader: React.FC = () => {
                   Settings
                 </a>
                 <hr className="my-1 border-gray-200" />
-                <a href="/login" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                <button
+                  onClick={() => {
+                    logout();
+                    window.location.href = "https://gobudget.duckdns.org";
+                  }}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                >
                   Sign out
-                </a>
+                </button>
               </div>
             )}
           </div>

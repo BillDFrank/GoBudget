@@ -113,7 +113,7 @@ const AppSidebar: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    router.push('/login');
+    window.location.href = 'https://gobudget.duckdns.org';
   };
 
   const renderMenuItems = (
