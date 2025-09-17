@@ -20,24 +20,27 @@ Base = declarative_base()
 engine = None
 SessionLocal = None
 
+
 def init_database():
     """Initialize database engine and session factory"""
     global engine, SessionLocal
-    
+
     if engine is not None:
         return engine
-    
+
     if not DATABASE_URL:
         raise ValueError("DATABASE_URL environment variable is not set")
-    
+
     try:
         engine = create_engine(DATABASE_URL)
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        SessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=engine)
         logger.info("Database engine created successfully")
         return engine
     except Exception as e:
         logger.error(f"Failed to create database engine: {e}")
         raise
+
 
 # Only initialize database if DATABASE_URL is available AND we're not in test mode
 # This allows models to be imported without requiring a database connection
@@ -50,7 +53,7 @@ def get_db():
     # Ensure database is initialized before creating session
     if SessionLocal is None:
         init_database()
-    
+
     db = SessionLocal()
     try:
         yield db

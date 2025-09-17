@@ -150,7 +150,8 @@ async def upload_receipts(
                 f"Extracted receipt data for {filename}: {receipt_data}")
 
             # Validate extracted data
-            required_keys = ["market", "branch", "total", "total_discount", "total_paid", "date", "products"]
+            required_keys = ["market", "branch", "total",
+                             "total_discount", "total_paid", "date", "products"]
             if not all(key in receipt_data for key in required_keys):
                 missing_keys = [
                     key for key in required_keys if key not in receipt_data]
@@ -208,8 +209,10 @@ async def upload_receipts(
                 invoice=receipt_data.get("invoice"),
                 date=receipt_date,
                 total=receipt_data["total"],  # Total before discounts
-                total_discount=receipt_data.get("total_discount", 0),  # Total discount amount
-                total_paid=receipt_data["total_paid"],  # Total amount paid (after discounts)
+                total_discount=receipt_data.get(
+                    "total_discount", 0),  # Total discount amount
+                # Total amount paid (after discounts)
+                total_paid=receipt_data["total_paid"],
                 user_id=current_user.id
             )
 
@@ -334,7 +337,8 @@ def get_monthly_summary(
         )
     ).all()
 
-    total_spent = sum(receipt.total_paid for receipt in receipts)  # Use amount actually paid
+    # Use amount actually paid
+    total_spent = sum(receipt.total_paid for receipt in receipts)
     receipt_count = len(receipts)
     average_per_receipt = total_spent / receipt_count if receipt_count > 0 else 0
 
@@ -399,7 +403,8 @@ def get_spending_summary(
         )
     ).all()
 
-    total_spent = sum(receipt.total_paid for receipt in receipts)  # Use amount actually paid
+    # Use amount actually paid
+    total_spent = sum(receipt.total_paid for receipt in receipts)
     receipt_count = len(receipts)
     average_per_receipt = total_spent / receipt_count if receipt_count > 0 else 0
 
@@ -594,8 +599,10 @@ async def process_pdf_content(
                 invoice=receipt_data.get("invoice"),
                 date=receipt_date,
                 total=receipt_data["total"],  # Total before discounts
-                total_discount=receipt_data.get("total_discount", 0),  # Total discount amount
-                total_paid=receipt_data["total_paid"],  # Total amount paid (after discounts)
+                total_discount=receipt_data.get(
+                    "total_discount", 0),  # Total discount amount
+                # Total amount paid (after discounts)
+                total_paid=receipt_data["total_paid"],
                 user_id=current_user.id
             )
 
@@ -664,7 +671,7 @@ async def process_pdf_batch(
     if SessionLocal is None:
         init_database()
         from ..database import SessionLocal
-    
+
     batch_db = SessionLocal()
     try:
         # Since we now check for duplicates before download, this should be minimal
@@ -818,8 +825,10 @@ async def process_pdf_batch(
                         branch=receipt_data["branch"],
                         invoice=receipt_data["invoice"],
                         total=receipt_data["total"],  # Total before discounts
-                        total_discount=receipt_data.get("total_discount", 0),  # Total discount amount
-                        total_paid=receipt_data["total_paid"],  # Total amount paid (after discounts)
+                        total_discount=receipt_data.get(
+                            "total_discount", 0),  # Total discount amount
+                        # Total amount paid (after discounts)
+                        total_paid=receipt_data["total_paid"],
                         date=receipt_date,
                         filename=filename
                     )
