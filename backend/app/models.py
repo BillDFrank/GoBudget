@@ -39,7 +39,9 @@ class Receipt(Base):
     branch = Column(String, nullable=False)
     invoice = Column(String)
     date = Column(Date, nullable=False)
-    total = Column(Float, nullable=False)
+    total = Column(Float, nullable=False)  # Total amount before discounts
+    total_discount = Column(Float, nullable=False, default=0)  # Total discount amount
+    total_paid = Column(Float, nullable=False)  # Total amount actually paid (after discounts)
     # Prevent duplicate processing
     filename = Column(String, nullable=True, unique=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)

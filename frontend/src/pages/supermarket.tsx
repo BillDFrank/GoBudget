@@ -15,7 +15,9 @@ interface Receipt {
   branch: string;
   invoice?: string;
   date: string;
-  total: number;
+  total: number;  // Total before discounts
+  total_discount?: number;  // Total discount amount
+  total_paid: number;  // Total amount paid (after discounts)
   user_id: number;
   products?: ReceiptProduct[];
 }
@@ -907,7 +909,7 @@ export default function Supermarket() {
                         <td className="px-6 py-4">{receipt.market}</td>
                         <td className="px-6 py-4">{receipt.branch || '-'}</td>
                         <td className="px-6 py-4 font-semibold text-green-600">
-                          {formatCurrency(receipt.total)}
+                          {formatCurrency(receipt.total_paid)}
                         </td>
                         <td className="px-6 py-4">
                           {(() => {
@@ -983,12 +985,37 @@ export default function Supermarket() {
                   
                   <div>
                     <h4 className="font-medium text-gray-900 mb-4">Summary</h4>
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="text-center">
-                        <p className="text-sm text-green-600 mb-1">Total Amount</p>
-                        <p className="text-2xl font-bold text-green-700">
-                          {formatCurrency(selectedReceipt.total)}
-                        </p>
+                    <div className="space-y-4">
+                      {/* Total before discount */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="text-center">
+                          <p className="text-sm text-blue-600 mb-1">Total (Before Discount)</p>
+                          <p className="text-xl font-bold text-blue-700">
+                            {formatCurrency(selectedReceipt.total)}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Discount amount (if any) */}
+                      {selectedReceipt.total_discount && selectedReceipt.total_discount > 0 && (
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                          <div className="text-center">
+                            <p className="text-sm text-orange-600 mb-1">Total Discount</p>
+                            <p className="text-lg font-bold text-orange-700">
+                              -{formatCurrency(selectedReceipt.total_discount)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Amount paid */}
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="text-center">
+                          <p className="text-sm text-green-600 mb-1">Amount Paid</p>
+                          <p className="text-2xl font-bold text-green-700">
+                            {formatCurrency(selectedReceipt.total_paid)}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
