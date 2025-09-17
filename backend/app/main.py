@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 import os
 import logging
-from .database import engine, get_db
+from .database import init_database, get_db
 from . import models
 from .routes import auth, transactions, dashboard, receipts, outlook
 
@@ -25,6 +25,7 @@ logger.info(f"JWT_SECRET: {'***' if os.getenv('JWT_SECRET') else 'NOT SET'}")
 
 # Try to create tables, but don't fail if database is not available
 try:
+    engine = init_database()
     models.Base.metadata.create_all(bind=engine)
 except Exception as e:
     print(f"Warning: Could not create database tables: {e}")

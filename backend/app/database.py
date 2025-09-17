@@ -13,20 +13,44 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 logger.info(f"DATABASE_URL loaded: {DATABASE_URL}")
 
-# Create engine - let it fail if database is not available
-try:
-    engine = create_engine(DATABASE_URL)
-    logger.info("Database engine created successfully")
-except Exception as e:
-    logger.error(f"Failed to create database engine: {e}")
-    raise
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
+# Create a base for models
 Base = declarative_base()
+
+# Initialize engine and session variables
+engine = None
+SessionLocal = None
+
+def init_database():
+    """Initialize database engine and session factory"""
+    global engine, SessionLocal
+    
+    if engine is not None:
+        return engine
+    
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL environment variable is not set")
+    
+    try:
+        engine = create_engine(DATABASE_URL)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        logger.info("Database engine created successfully")
+        return engine
+    except Exception as e:
+        logger.error(f"Failed to create database engine: {e}")
+        raise
+
+# Only initialize database if DATABASE_URL is available AND we're not in test mode
+# This allows models to be imported without requiring a database connection
+# Database will be initialized when actually needed via get_db() or init_database()
+if DATABASE_URL and not os.getenv("PYTEST_CURRENT_TEST"):
+    init_database()
 
 
 def get_db():
+    # Ensure database is initialized before creating session
+    if SessionLocal is None:
+        init_database()
+    
     db = SessionLocal()
     try:
         yield db

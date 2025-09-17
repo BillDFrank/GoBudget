@@ -9,7 +9,9 @@ from ..database import get_db
 from ..models import User as UserModel
 from ..schemas import UserCreate, User
 
-SECRET_KEY = os.getenv("JWT_SECRET", "supersecretkey")
+SECRET_KEY = os.getenv("JWT_SECRET")
+if not SECRET_KEY:
+    raise ValueError("JWT_SECRET environment variable is required but not set")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

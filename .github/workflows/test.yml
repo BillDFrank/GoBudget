@@ -85,8 +85,9 @@ jobs:
         run: |
           cd backend
           python -c "
-          from app.database import engine
+          from app.database import init_database
           from app.models import Base
+          engine = init_database()
           Base.metadata.create_all(bind=engine)
           print('Database tables created successfully')
           "

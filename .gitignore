@@ -200,3 +200,17 @@ dmypy.json
 
 # Docker volumes
 postgres_data/
+
+# Security and secrets
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets.json
+secrets.yaml
+secrets.yml
+credentials.json
+.secrets/
+.credentials/

@@ -271,7 +271,7 @@ After successful deployment:
 
 3. **Database Migration**
    ```bash
-   docker-compose exec backend python -c "from app.database import engine; from app.models import Base; Base.metadata.create_all(bind=engine)"
+   docker-compose exec backend python -c "from app.database import init_database; from app.models import Base; engine = init_database(); Base.metadata.create_all(bind=engine)"
    ```
 
 ## Security Notes

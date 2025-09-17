@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 from typing import List
 import httpx
 import logging
-from ..database import get_db, SessionLocal
+from ..database import get_db, init_database
 from ..models import Receipt, ReceiptProduct, User
 from ..schemas import Receipt as ReceiptSchema, ReceiptUploadResponse, SpendingSummary, PaginatedReceipts
 from .auth import get_current_user
@@ -659,6 +659,12 @@ async def process_pdf_batch(
     logger.info(f"Processing batch of {len(pdf_batch)} PDFs")
 
     # Use a fresh database session for this batch to avoid transaction issues
+    # Ensure database is initialized and get SessionLocal
+    from ..database import SessionLocal
+    if SessionLocal is None:
+        init_database()
+        from ..database import SessionLocal
+    
     batch_db = SessionLocal()
     try:
         # Since we now check for duplicates before download, this should be minimal
