@@ -65,7 +65,9 @@ class ReceiptBase(BaseModel):
     branch: str
     invoice: Optional[str] = None
     date: date
-    total: float
+    total: float  # Total before discounts
+    total_discount: Optional[float] = 0  # Total discount amount
+    total_paid: float  # Total amount paid (after discounts)
 
 
 class ReceiptCreate(ReceiptBase):

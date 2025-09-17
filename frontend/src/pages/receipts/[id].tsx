@@ -23,7 +23,9 @@ interface Receipt {
   branch: string;
   invoice?: string;
   date: string;
-  total: number;
+  total: number;  // Total before discounts
+  total_discount?: number;  // Total discount amount
+  total_paid: number;  // Total amount paid (after discounts)
   user_id: number;
   products: ReceiptProduct[];
 }
@@ -192,7 +194,7 @@ export default function ReceiptDetails() {
                 )}
               </div>
               <div className="text-right">
-                <p className="text-3xl font-bold text-gray-900">{formatCurrency(receipt.total)}</p>
+                <p className="text-3xl font-bold text-gray-900">{formatCurrency(receipt.total_paid)}</p>
                 <p className="text-sm text-gray-600">{formatDate(receipt.date)}</p>
               </div>
             </div>
@@ -260,15 +262,36 @@ export default function ReceiptDetails() {
                 <tfoot className="bg-gray-50">
                   <tr>
                     <td colSpan={4} className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
-                      Total:
+                      Total Paid:
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                      {formatCurrency(receipt.total)}
+                      {formatCurrency(receipt.total_paid)}
                     </td>
                     <td></td>
                   </tr>
                 </tfoot>
               </table>
+            </div>
+          </div>
+
+          {/* Receipt Total Breakdown */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Receipt Summary</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Subtotal (Before Discount):</span>
+                <span className="font-semibold text-gray-900">{formatCurrency(receipt.total)}</span>
+              </div>
+              {receipt.total_discount && receipt.total_discount > 0 && (
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-orange-600">Total Discount:</span>
+                  <span className="font-semibold text-orange-600">-{formatCurrency(receipt.total_discount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center py-3 border-t-2 border-gray-200">
+                <span className="text-lg font-semibold text-gray-900">Amount Paid:</span>
+                <span className="text-xl font-bold text-green-600">{formatCurrency(receipt.total_paid)}</span>
+              </div>
             </div>
           </div>
 

@@ -46,6 +46,11 @@ jobs:
           pip install -r backend/requirements.txt
           pip install python-dotenv psycopg2-binary requests pytest
 
+      - name: Run unit tests (no dependencies)
+        run: |
+          echo 'Running unit tests that require no external dependencies...'
+          pytest tests/test_receipt_fields.py tests/test_receipt_processing.py tests/test_receipt_integration.py -v
+
       - name: Create test environment file
         run: |
           cat > .env << EOF
