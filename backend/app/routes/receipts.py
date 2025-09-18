@@ -10,14 +10,58 @@ from ..models import Receipt, ReceiptProduct, User
 from ..schemas import Receipt as ReceiptSchema, ReceiptUploadResponse, SpendingSummary, PaginatedReceipts
 from .auth import get_current_user
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# PDF extraction API endpoint
 PDF_EXTRACTOR_URL = "http://91.98.45.199:8000/extract-batch"
+
+
+def _normalize_totals(receipt_data: dict) -> tuple[float, float, float]:
+    """Return sanitized (total, discount, paid) as non-null floats.
+
+    Strategy:
+    - If total is None, prefer sum(price*qty), then total_paid, else 0.0
+    - If discount is None, use max(total - total_paid, 0.0)
+    - If paid is None, use (total - discount) with safe fallbacks
+    """
+    products = receipt_data.get("products") or []
+    try:
+        products_sum = sum(
+            float(p.get("price") or 0) * float(p.get("quantity") or 0)
+            for p in products
+        )
+    except Exception:
+        products_sum = 0.0
+
+    raw_total = receipt_data.get("total")
+    raw_paid = receipt_data.get("total_paid")
+    raw_discount = receipt_data.get("total_discount")
+
+    total = float(raw_total) if raw_total is not None else None
+    total_paid = float(raw_paid) if raw_paid is not None else None
+    total_discount = float(raw_discount) if raw_discount is not None else None
+
+    if total is None:
+        if products_sum and products_sum > 0:
+            total = products_sum
+        elif total_paid is not None:
+            total = total_paid
+        else:
+            total = 0.0
+
+    if total_discount is None:
+        if total_paid is not None:
+            total_discount = max(total - total_paid, 0.0)
+        else:
+            total_discount = 0.0
+
+    if total_paid is None:
+        candidate = total - (total_discount or 0.0)
+        total_paid = max(candidate, 0.0)
+
+    return round(float(total), 2), round(float(total_discount), 2), round(float(total_paid), 2)
 
 
 @router.post("/upload", response_model=List[ReceiptUploadResponse])
@@ -29,7 +73,6 @@ async def upload_receipts(
     """Upload multiple PDF receipts and extract data using external API"""
     logger.info(f"Received {len(files)} files for processing")
 
-    # Validate all files are PDFs
     for file in files:
         if not file.filename.lower().endswith('.pdf'):
             raise HTTPException(
@@ -39,7 +82,6 @@ async def upload_receipts(
 
     results = []
 
-    # Read all file contents first
     file_contents = []
     for file in files:
         try:
@@ -59,14 +101,12 @@ async def upload_receipts(
                 extracted_data=None
             ))
 
-    # Prepare multipart form data for all files
     files_data = []
     for file_info in file_contents:
         files_data.append(
             ('files', (file_info['filename'], file_info['content'], 'application/pdf')))
         logger.info(f"Prepared file for upload: {file_info['filename']}")
 
-    # Call the PDF extraction API with all files at once
     logger.info(
         f"Calling PDF extraction API: {PDF_EXTRACTOR_URL} with {len(files_data)} files")
     try:
@@ -78,7 +118,6 @@ async def upload_receipts(
             if response.status_code != 200:
                 logger.error(
                     f"API returned status {response.status_code}: {response.text}")
-                # Mark all files as failed
                 for file_info in file_contents:
                     results.append(ReceiptUploadResponse(
                         success=False,
@@ -89,7 +128,6 @@ async def upload_receipts(
 
     except httpx.RequestError as e:
         logger.error(f"Network error calling PDF extraction API: {str(e)}")
-        # Mark all files as failed
         for file_info in file_contents:
             results.append(ReceiptUploadResponse(
                 success=False,
@@ -98,13 +136,11 @@ async def upload_receipts(
             ))
         return results
 
-    # Parse the batch response
     try:
         extraction_result = response.json()
         logger.info(f"Batch extraction result: {extraction_result}")
     except Exception as e:
         logger.error(f"Failed to parse API response as JSON: {str(e)}")
-        # Mark all files as failed
         for file_info in file_contents:
             results.append(ReceiptUploadResponse(
                 success=False,
@@ -115,7 +151,6 @@ async def upload_receipts(
 
     if not extraction_result.get("results"):
         logger.warning("No results in extraction response")
-        # Mark all files as failed
         for file_info in file_contents:
             results.append(ReceiptUploadResponse(
                 success=False,
@@ -127,7 +162,6 @@ async def upload_receipts(
     api_results = extraction_result["results"]
     logger.info(f"Received {len(api_results)} results from API")
 
-    # Process each result
     for i, result in enumerate(api_results):
         filename = file_contents[i]['filename'] if i < len(
             file_contents) else f"file_{i+1}"
@@ -149,7 +183,6 @@ async def upload_receipts(
             logger.info(
                 f"Extracted receipt data for {filename}: {receipt_data}")
 
-            # Validate extracted data
             required_keys = ["market", "branch", "total",
                              "total_discount", "total_paid", "date", "products"]
             if not all(key in receipt_data for key in required_keys):
@@ -164,18 +197,16 @@ async def upload_receipts(
                 ))
                 continue
 
-            # Parse date - handle different date formats
             try:
                 date_str = receipt_data["date"]
                 receipt_date = None
 
-                # Try different date formats
                 date_formats = [
-                    "%d/%m/%Y",    # DD/MM/YYYY (forward slashes)
-                    "%d-%m-%Y",    # DD-MM-YYYY (hyphens)
-                    "%Y-%m-%d",    # YYYY-MM-DD (ISO format)
-                    "%m/%d/%Y",    # MM/DD/YYYY (US format)
-                    "%m-%d-%Y"     # MM-DD-YYYY (US format with hyphens)
+                    "%d/%m/%Y",
+                    "%d-%m-%Y",
+                    "%Y-%m-%d",
+                    "%m/%d/%Y",
+                    "%m-%d-%Y"
                 ]
 
                 for date_format in date_formats:
@@ -202,28 +233,26 @@ async def upload_receipts(
                 ))
                 continue
 
-            # Create receipt
+            norm_total, norm_discount, norm_paid = _normalize_totals(
+                receipt_data)
+
             db_receipt = Receipt(
                 market=receipt_data["market"],
                 branch=receipt_data["branch"],
                 invoice=receipt_data.get("invoice"),
                 date=receipt_date,
-                total=receipt_data["total"],  # Total before discounts
-                total_discount=receipt_data.get(
-                    "total_discount", 0),  # Total discount amount
-                # Total amount paid (after discounts)
-                total_paid=receipt_data["total_paid"],
+                total=norm_total,
+                total_discount=norm_discount,
+                total_paid=norm_paid,
                 user_id=current_user.id
             )
 
             db.add(db_receipt)
-            db.flush()  # Get the receipt ID
+            db.flush()
             logger.info(
                 f"Created receipt with ID: {db_receipt.id} for {filename}")
 
-            # Create receipt products
             for product_data in receipt_data["products"]:
-                # Handle null values for discounts
                 discount = product_data.get("discount") or 0
                 discount2 = product_data.get("discount2") or 0
 
@@ -273,24 +302,19 @@ def get_receipts(
     current_user: User = Depends(get_current_user)
 ):
     """Get user's receipts with pagination"""
-    # Ensure page and per_page are valid
     page = max(1, page)
-    per_page = min(max(1, per_page), 100)  # Max 100 items per page
+    per_page = min(max(1, per_page), 100)
 
-    # Calculate offset
     skip = (page - 1) * per_page
 
-    # Get total count
     total = db.query(Receipt).filter(
         Receipt.user_id == current_user.id).count()
 
-    # Get receipts for current page
     receipts = db.query(Receipt).options(selectinload(Receipt.products)).filter(
         Receipt.user_id == current_user.id
     ).order_by(Receipt.date.desc()).offset(skip).limit(per_page).all()
 
-    # Calculate pagination metadata
-    pages = (total + per_page - 1) // per_page  # Ceiling division
+    pages = (total + per_page - 1) // per_page
     has_next = page < pages
     has_prev = page > 1
 
@@ -315,20 +339,16 @@ def get_monthly_summary(
     """Get spending summary for a specific month/year"""
     today = date.today()
 
-    # Use current month/year if not specified
     target_year = year if year is not None else today.year
     target_month = month if month is not None else today.month
 
-    # Get start and end of the specified month
     start_date = date(target_year, target_month, 1)
 
-    # Calculate last day of month
     if target_month == 12:
         end_date = date(target_year + 1, 1, 1) - timedelta(days=1)
     else:
         end_date = date(target_year, target_month + 1, 1) - timedelta(days=1)
 
-    # Get receipts in the month
     receipts = db.query(Receipt).filter(
         and_(
             Receipt.user_id == current_user.id,
@@ -337,12 +357,10 @@ def get_monthly_summary(
         )
     ).all()
 
-    # Use amount actually paid
     total_spent = sum(receipt.total_paid for receipt in receipts)
     receipt_count = len(receipts)
     average_per_receipt = total_spent / receipt_count if receipt_count > 0 else 0
 
-    # Get top categories by product type
     category_totals = db.query(
         ReceiptProduct.product_type,
         func.sum(ReceiptProduct.price * ReceiptProduct.quantity).label('total')
@@ -380,11 +398,9 @@ def get_spending_summary(
     today = date.today()
 
     if period == "week":
-        # Get start of current week (Monday)
         start_date = today - timedelta(days=today.weekday())
         end_date = start_date + timedelta(days=6)
     elif period == "month":
-        # Get start of current month
         start_date = today.replace(day=1)
         end_date = (start_date + timedelta(days=32)
                     ).replace(day=1) - timedelta(days=1)
@@ -394,7 +410,6 @@ def get_spending_summary(
             detail="Period must be 'week' or 'month'"
         )
 
-    # Get receipts in the period
     receipts = db.query(Receipt).filter(
         and_(
             Receipt.user_id == current_user.id,
@@ -403,12 +418,10 @@ def get_spending_summary(
         )
     ).all()
 
-    # Use amount actually paid
     total_spent = sum(receipt.total_paid for receipt in receipts)
     receipt_count = len(receipts)
     average_per_receipt = total_spent / receipt_count if receipt_count > 0 else 0
 
-    # Get top categories by product type
     category_totals = db.query(
         ReceiptProduct.product_type,
         func.sum(ReceiptProduct.price * ReceiptProduct.quantity).label('total')
@@ -473,11 +486,9 @@ def delete_receipt(
             detail="Receipt not found"
         )
 
-    # Delete associated receipt products first
     db.query(ReceiptProduct).filter(
         ReceiptProduct.receipt_id == receipt_id).delete()
 
-    # Delete the receipt
     db.delete(receipt)
     db.commit()
 
@@ -493,10 +504,8 @@ async def process_pdf_content(
     """Process a single PDF content and save to database"""
     logger.info(f"Processing PDF: {filename}, size: {len(pdf_content)} bytes")
 
-    # Prepare multipart form data
     files_data = [('files', (filename, pdf_content, 'application/pdf'))]
 
-    # Call the PDF extraction API
     logger.info(f"Calling PDF extraction API: {PDF_EXTRACTOR_URL}")
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -512,7 +521,6 @@ async def process_pdf_content(
                     extracted_data=None
                 )
 
-            # Parse the response
             extraction_result = response.json()
             logger.info(f"Extraction result: {extraction_result}")
 
@@ -532,7 +540,7 @@ async def process_pdf_content(
                     extracted_data=None
                 )
 
-            result = api_results[0]  # Only one file
+            result = api_results[0]
 
             if not result.get("success"):
                 error_msg = result.get('error_message', 'Unknown error')
@@ -548,7 +556,6 @@ async def process_pdf_content(
             logger.info(
                 f"Extracted receipt data for {filename}: {receipt_data}")
 
-            # Validate extracted data
             required_keys = ["market", "branch", "total", "date", "products"]
             if not all(key in receipt_data for key in required_keys):
                 missing_keys = [
@@ -561,7 +568,6 @@ async def process_pdf_content(
                     extracted_data=receipt_data
                 )
 
-            # Parse date
             try:
                 date_str = receipt_data["date"]
                 receipt_date = None
@@ -592,17 +598,17 @@ async def process_pdf_content(
                     extracted_data=receipt_data
                 )
 
-            # Create receipt
+            norm_total, norm_discount, norm_paid = _normalize_totals(
+                receipt_data)
+
             db_receipt = Receipt(
                 market=receipt_data["market"],
                 branch=receipt_data["branch"],
                 invoice=receipt_data.get("invoice"),
                 date=receipt_date,
-                total=receipt_data["total"],  # Total before discounts
-                total_discount=receipt_data.get(
-                    "total_discount", 0),  # Total discount amount
-                # Total amount paid (after discounts)
-                total_paid=receipt_data["total_paid"],
+                total=norm_total,
+                total_discount=norm_discount,
+                total_paid=norm_paid,
                 user_id=current_user.id
             )
 
@@ -611,7 +617,6 @@ async def process_pdf_content(
             logger.info(
                 f"Created receipt with ID: {db_receipt.id} for {filename}")
 
-            # Create receipt products
             for product_data in receipt_data["products"]:
                 discount = product_data.get("discount") or 0
                 discount2 = product_data.get("discount2") or 0
@@ -817,6 +822,10 @@ async def process_pdf_batch(
                     ))
                     continue
 
+                # Normalize totals to avoid NULLs and maintain constraints
+                norm_total, norm_discount, norm_paid = _normalize_totals(
+                    receipt_data)
+
                 # Create receipt record
                 try:
                     db_receipt = Receipt(
@@ -824,11 +833,10 @@ async def process_pdf_batch(
                         market=receipt_data["market"],
                         branch=receipt_data["branch"],
                         invoice=receipt_data["invoice"],
-                        total=receipt_data["total"],  # Total before discounts
-                        total_discount=receipt_data.get(
-                            "total_discount", 0),  # Total discount amount
+                        total=norm_total,  # Total before discounts
+                        total_discount=norm_discount,  # Total discount amount
                         # Total amount paid (after discounts)
-                        total_paid=receipt_data["total_paid"],
+                        total_paid=norm_paid,
                         date=receipt_date,
                         filename=filename
                     )
@@ -841,7 +849,9 @@ async def process_pdf_batch(
                         market=receipt_data["market"],
                         branch=receipt_data["branch"],
                         invoice=receipt_data["invoice"],
-                        total=receipt_data["total"],
+                        total=norm_total,
+                        total_discount=norm_discount,
+                        total_paid=norm_paid,
                         date=receipt_date
                     )
 
