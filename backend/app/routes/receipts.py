@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, and_
 from datetime import datetime, date, timedelta
 from typing import List
 import httpx
 import logging
+import io
+import csv
 from ..database import get_db, init_database
 from ..models import Receipt, ReceiptProduct, User
 from ..schemas import Receipt as ReceiptSchema, ReceiptUploadResponse, SpendingSummary, PaginatedReceipts
@@ -917,3 +920,86 @@ async def process_pdf_batch(
         return skipped_results + failed_results
     finally:
         batch_db.close()
+
+
+@router.get("/export/csv")
+def export_receipts_csv(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Export all user's receipts as CSV file"""
+    
+    # Get all receipts for the current user with products
+    receipts = db.query(Receipt).options(selectinload(Receipt.products)).filter(
+        Receipt.user_id == current_user.id
+    ).order_by(Receipt.date.desc()).all()
+    
+    # Create CSV content in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow([
+        'Date',
+        'Market', 
+        'Branch',
+        'Invoice',
+        'Total Amount',
+        'Total Discount', 
+        'Total Paid',
+        'Products (Type||Name||Qty||Price||Disc1||Disc2||Total, separated by |)'
+    ])
+    
+    # Write data rows
+    for receipt in receipts:
+        if receipt.products:
+            # Join all products into single fields with custom separators
+            # Format: product_type||product_name||quantity||price||discount||discount2||total
+            product_lines = []
+            for product in receipt.products:
+                product_total = (product.price * product.quantity) - (product.discount + product.discount2)
+                # Clean product data to avoid encoding issues
+                clean_product_type = (product.product_type or "").replace("||", "|").replace("|", "-")
+                clean_product_name = (product.product or "").replace("||", "|").replace("|", "-")
+                product_line = f"{clean_product_type}||{clean_product_name}||{product.quantity:.2f}||{product.price:.2f}||{product.discount:.2f}||{product.discount2:.2f}||{product_total:.2f}"
+                product_lines.append(product_line)
+            
+            # Join all product lines with | separator
+            all_products = '|'.join(product_lines)
+            
+            writer.writerow([
+                receipt.date.strftime('%Y-%m-%d'),
+                receipt.market,
+                receipt.branch or '',
+                receipt.invoice or '',
+                f"{receipt.total:.2f}",
+                f"{receipt.total_discount:.2f}",
+                f"{receipt.total_paid:.2f}",
+                all_products  # All product details in one column
+            ])
+        else:
+            # If receipt has no products, write receipt-only row
+            writer.writerow([
+                receipt.date.strftime('%Y-%m-%d'),
+                receipt.market,
+                receipt.branch or '',
+                receipt.invoice or '',
+                f"{receipt.total:.2f}",
+                f"{receipt.total_discount:.2f}",
+                f"{receipt.total_paid:.2f}",
+                ''  # Empty products column
+            ])
+    
+    # Get CSV content
+    csv_content = output.getvalue()
+    output.close()
+    
+    # Generate filename with current date
+    filename = f"supermarket_receipts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    # Create streaming response with proper UTF-8 encoding
+    return StreamingResponse(
+        io.BytesIO(csv_content.encode('utf-8-sig')),
+        media_type='text/csv; charset=utf-8',
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

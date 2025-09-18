@@ -511,6 +511,41 @@ export default function Supermarket() {
     }, 0);
   };
 
+  // Export receipts to CSV
+  const exportToCSV = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        setError('No authentication token found');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/receipts/export/csv`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to export receipts');
+      }
+
+      // Get the blob and create a download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `supermarket_receipts_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error exporting CSV:', err);
+      setError('Failed to export receipts to CSV');
+    }
+  };
+
   // Pagination functions
   const handlePageChange = async (page: number) => {
     if (page >= 1 && page <= (paginationData?.pages || 1)) {
@@ -860,8 +895,25 @@ export default function Supermarket() {
                 <p className="text-gray-600">Upload your first PDF receipt to get started</p>
               </div>
             ) : (
-              <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
-                <table className="w-full text-sm text-left text-gray-500">
+              <>
+                {/* Action Bar */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
+                  <div className="text-sm text-gray-600">
+                    {receipts.length} receipts on this page
+                  </div>
+                  <button
+                    onClick={exportToCSV}
+                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export CSV
+                  </button>
+                </div>
+                
+                <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-sm text-left text-gray-500">
                   <thead className="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0 z-10">
                     <tr>
                       <th scope="col" className="px-4 py-3">
@@ -934,6 +986,7 @@ export default function Supermarket() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
             
             {/* Pagination */}
