@@ -9,9 +9,12 @@ from ..database import get_db
 from ..models import User as UserModel
 from ..schemas import UserCreate, User
 
-SECRET_KEY = os.getenv("JWT_SECRET")
-if not SECRET_KEY:
-    raise ValueError("JWT_SECRET environment variable is required but not set")
+def get_secret_key():
+    """Get JWT secret key from environment variable"""
+    secret_key = os.getenv("JWT_SECRET")
+    if not secret_key:
+        raise ValueError("JWT_SECRET environment variable is required but not set")
+    return secret_key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -36,7 +39,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
     return encoded_jwt
 
 
@@ -56,7 +59,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
