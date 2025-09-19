@@ -53,10 +53,36 @@ interface SpendingSummary {
   top_categories: Array<{ category: string; amount: number }>;
 }
 
+interface SortConfig {
+  field: 'date' | 'market' | 'branch' | 'total' | 'total_discount' | null;
+  direction: 'asc' | 'desc';
+}
+
+interface FilterConfig {
+  market: string;
+  branch: string;
+  dateFrom: string;
+  dateTo: string;
+  totalMin: string;
+  totalMax: string;
+  discountMin: string;
+  discountMax: string;
+}
+
+interface FilterOptions {
+  markets: string[];
+  branches: string[];
+  date_range: { min: string | null; max: string | null };
+  total_range: { min: number; max: number };
+  discount_range: { min: number; max: number };
+}
+
 export default function Supermarket() {
   const { isAuthenticated, user, checkAuth } = useAuthStore();
   const router = useRouter();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [allReceipts, setAllReceipts] = useState<Receipt[]>([]); // Store all receipts for client-side operations
+  const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]); // Store filtered receipts
   const [paginationData, setPaginationData] = useState<PaginatedReceipts | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [spendingSummary, setSpendingSummary] = useState<SpendingSummary | null>(null);
@@ -75,6 +101,21 @@ export default function Supermarket() {
     total_steps: number;
     completed_steps: number;
   } | null>(null);
+
+  // Sorting and filtering state
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'date', direction: 'desc' });
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>({
+    market: '',
+    branch: '',
+    dateFrom: '',
+    dateTo: '',
+    totalMin: '',
+    totalMax: '',
+    discountMin: '',
+    discountMax: ''
+  });
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Check authentication on component mount
   useEffect(() => {
@@ -129,6 +170,15 @@ export default function Supermarket() {
     }
   }, [loading]);
 
+  // Load filter options when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadFilterOptions();
+    }
+  }, [isAuthenticated]);
+
+  // Remove the auto-applying useEffect - we'll only apply filters when user clicks Apply
+
   // Load receipts and spending summary
   const loadData = async (page: number = 1) => {
     if (!isAuthenticated) {
@@ -149,8 +199,9 @@ export default function Supermarket() {
         return;
       }
 
-      // Load receipts with pagination
-      const receiptsResponse = await fetch(`${API_BASE_URL}/receipts/?page=${page}&per_page=25`, {
+      // Load ALL receipts without pagination for client-side operations
+      // We'll use a large per_page value to get all receipts
+      const receiptsResponse = await fetch(`${API_BASE_URL}/receipts/?page=1&per_page=10000`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -167,8 +218,29 @@ export default function Supermarket() {
       }
 
       const receiptsData: PaginatedReceipts = await receiptsResponse.json();
-      setReceipts(receiptsData.items);
-      setPaginationData(receiptsData);
+      setAllReceipts(receiptsData.items); // Store all receipts
+      
+      // Apply initial client-side sorting and filtering
+      const processedReceipts = applySortingAndFiltering(receiptsData.items);
+      setFilteredReceipts(processedReceipts);
+      
+      // Apply pagination for display
+      const startIndex = (page - 1) * 25;
+      const endIndex = startIndex + 25;
+      setReceipts(processedReceipts.slice(startIndex, endIndex));
+      
+      // Update pagination data
+      const totalFiltered = processedReceipts.length;
+      const totalPages = Math.ceil(totalFiltered / 25);
+      setPaginationData({
+        items: processedReceipts.slice(startIndex, endIndex),
+        total: totalFiltered,
+        page: page,
+        per_page: 25,
+        pages: totalPages,
+        has_next: page < totalPages,
+        has_prev: page > 1
+      });
       setCurrentPage(page);
 
       // Load spending summary for selected month
@@ -199,6 +271,205 @@ export default function Supermarket() {
       setLoading(false);
       setIsImporting(false);
     }
+  };
+
+  // Load filter options
+  const loadFilterOptions = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/receipts/filter-options`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const options: FilterOptions = await response.json();
+        setFilterOptions(options);
+      }
+    } catch (error) {
+      console.error('Error loading filter options:', error);
+    }
+  };
+
+  // Client-side sorting and filtering function
+  const applySortingAndFiltering = (receiptsToProcess: Receipt[], customSortConfig?: SortConfig) => {
+    let processed = [...receiptsToProcess];
+
+    // Use custom sort config if provided, otherwise use current state
+    const activeSortConfig = customSortConfig || sortConfig;
+
+    // Apply filters
+    if (filterConfig.market) {
+      processed = processed.filter(receipt => 
+        receipt.market.toLowerCase().includes(filterConfig.market.toLowerCase())
+      );
+    }
+    
+    if (filterConfig.branch) {
+      processed = processed.filter(receipt => 
+        receipt.branch?.toLowerCase().includes(filterConfig.branch.toLowerCase())
+      );
+    }
+    
+    if (filterConfig.dateFrom) {
+      processed = processed.filter(receipt => 
+        new Date(receipt.date) >= new Date(filterConfig.dateFrom)
+      );
+    }
+    
+    if (filterConfig.dateTo) {
+      processed = processed.filter(receipt => 
+        new Date(receipt.date) <= new Date(filterConfig.dateTo)
+      );
+    }
+    
+    if (filterConfig.totalMin) {
+      processed = processed.filter(receipt => 
+        receipt.total_paid >= parseFloat(filterConfig.totalMin)
+      );
+    }
+    
+    if (filterConfig.totalMax) {
+      processed = processed.filter(receipt => 
+        receipt.total_paid <= parseFloat(filterConfig.totalMax)
+      );
+    }
+    
+    if (filterConfig.discountMin) {
+      processed = processed.filter(receipt => {
+        const totalDiscount = receipt.products ? receipt.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
+        return totalDiscount >= parseFloat(filterConfig.discountMin);
+      });
+    }
+    
+    if (filterConfig.discountMax) {
+      processed = processed.filter(receipt => {
+        const totalDiscount = receipt.products ? receipt.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
+        return totalDiscount <= parseFloat(filterConfig.discountMax);
+      });
+    }
+
+    // Apply sorting
+    if (activeSortConfig.field) {
+      processed.sort((a, b) => {
+        let aValue: any, bValue: any;
+        
+        switch (activeSortConfig.field) {
+          case 'date':
+            aValue = new Date(a.date);
+            bValue = new Date(b.date);
+            break;
+          case 'market':
+            aValue = a.market.toLowerCase();
+            bValue = b.market.toLowerCase();
+            break;
+          case 'branch':
+            aValue = (a.branch || '').toLowerCase();
+            bValue = (b.branch || '').toLowerCase();
+            break;
+          case 'total':
+            aValue = a.total_paid;
+            bValue = b.total_paid;
+            break;
+          case 'total_discount':
+            // Use the same calculation as calculateTotalDiscount function
+            aValue = a.products ? a.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
+            bValue = b.products ? b.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
+            break;
+          default:
+            return 0;
+        }
+        
+        if (aValue < bValue) return activeSortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return activeSortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return processed;
+  };
+
+  // Handle sorting - now client-side only
+  const handleSort = (field: SortConfig['field']) => {
+    if (!field) return;
+    
+    const newDirection: 'asc' | 'desc' = sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc';
+    const newSortConfig = { field, direction: newDirection };
+    setSortConfig(newSortConfig);
+    
+    // Apply sorting and filtering immediately with the new sort config
+    const processedReceipts = applySortingAndFiltering(allReceipts, newSortConfig);
+    setFilteredReceipts(processedReceipts);
+    
+    // Reset to first page and apply pagination
+    const startIndex = 0;
+    const endIndex = 25;
+    setReceipts(processedReceipts.slice(startIndex, endIndex));
+    setCurrentPage(1);
+    
+    // Update pagination data
+    const totalFiltered = processedReceipts.length;
+    const totalPages = Math.ceil(totalFiltered / 25);
+    setPaginationData({
+      items: processedReceipts.slice(startIndex, endIndex),
+      total: totalFiltered,
+      page: 1,
+      per_page: 25,
+      pages: totalPages,
+      has_next: 1 < totalPages,
+      has_prev: false
+    });
+  };
+
+  // Handle filter changes
+  const handleFilterChange = (filterField: keyof FilterConfig, value: string) => {
+    setFilterConfig(prev => ({
+      ...prev,
+      [filterField]: value
+    }));
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilterConfig({
+      market: '',
+      branch: '',
+      dateFrom: '',
+      dateTo: '',
+      totalMin: '',
+      totalMax: '',
+      discountMin: '',
+      discountMax: ''
+    });
+  };
+
+  // Apply filters (now client-side only)
+  const applyFilters = () => {
+    const processedReceipts = applySortingAndFiltering(allReceipts);
+    setFilteredReceipts(processedReceipts);
+    
+    // Reset to first page and apply pagination
+    const startIndex = 0;
+    const endIndex = 25;
+    setReceipts(processedReceipts.slice(startIndex, endIndex));
+    setCurrentPage(1);
+    
+    // Update pagination data
+    const totalFiltered = processedReceipts.length;
+    const totalPages = Math.ceil(totalFiltered / 25);
+    setPaginationData({
+      items: processedReceipts.slice(startIndex, endIndex),
+      total: totalFiltered,
+      page: 1,
+      per_page: 25,
+      pages: totalPages,
+      has_next: 1 < totalPages,
+      has_prev: false
+    });
   };
 
   // Sync Outlook emails and process receipts
@@ -547,10 +818,24 @@ export default function Supermarket() {
   };
 
   // Pagination functions
-  const handlePageChange = async (page: number) => {
+  const handlePageChange = (page: number) => {
     if (page >= 1 && page <= (paginationData?.pages || 1)) {
       setSelectedReceipts([]); // Clear selection when changing pages
-      await loadData(page);
+      
+      // Client-side pagination
+      const startIndex = (page - 1) * 25;
+      const endIndex = startIndex + 25;
+      setReceipts(filteredReceipts.slice(startIndex, endIndex));
+      setCurrentPage(page);
+      
+      // Update pagination data
+      setPaginationData(prev => prev ? {
+        ...prev,
+        page: page,
+        has_next: page < prev.pages,
+        has_prev: page > 1,
+        items: filteredReceipts.slice(startIndex, endIndex)
+      } : null);
     }
   };
 
@@ -884,7 +1169,177 @@ export default function Supermarket() {
             )}
           </div>
           <div className="card-content">
-            {receipts.length === 0 ? (
+            {/* Action Bar - Always visible */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-gray-600">
+                  {filteredReceipts.length} receipts total • {receipts.length} on this page
+                </div>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-3 py-1 text-sm rounded-lg transition-colors flex items-center gap-2 ${
+                    showFilters 
+                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-.553.894l-2 1A1 1 0 0110 20v-5.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Filters
+                </button>
+              </div>
+              <button
+                onClick={exportToCSV}
+                className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export CSV
+              </button>
+            </div>
+
+            {/* Filter Panel - Always available when toggled */}
+            {showFilters && (
+              <div className="p-4 bg-gray-50 border-b border-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Market Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Market</label>
+                    <select
+                      value={filterConfig.market}
+                      onChange={(e) => handleFilterChange('market', e.target.value)}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All Markets</option>
+                      {filterOptions?.markets.map(market => (
+                        <option key={market} value={market}>{market}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Branch Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Branch</label>
+                    <select
+                      value={filterConfig.branch}
+                      onChange={(e) => handleFilterChange('branch', e.target.value)}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All Branches</option>
+                      {filterOptions?.branches.map(branch => (
+                        <option key={branch} value={branch}>{branch}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Date From */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Date From</label>
+                    <input
+                      type="date"
+                      value={filterConfig.dateFrom}
+                      onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
+                      min={filterOptions?.date_range.min || undefined}
+                      max={filterOptions?.date_range.max || undefined}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Date To */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Date To</label>
+                    <input
+                      type="date"
+                      value={filterConfig.dateTo}
+                      onChange={(e) => handleFilterChange('dateTo', e.target.value)}
+                      min={filterOptions?.date_range.min || undefined}
+                      max={filterOptions?.date_range.max || undefined}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Total Min */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Min Amount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={filterConfig.totalMin}
+                      onChange={(e) => handleFilterChange('totalMin', e.target.value)}
+                      min={filterOptions?.total_range.min}
+                      max={filterOptions?.total_range.max}
+                      placeholder="0.00"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Total Max */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Max Amount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={filterConfig.totalMax}
+                      onChange={(e) => handleFilterChange('totalMax', e.target.value)}
+                      min={filterOptions?.total_range.min}
+                      max={filterOptions?.total_range.max}
+                      placeholder="999.99"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Discount Min */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Min Discount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={filterConfig.discountMin}
+                      onChange={(e) => handleFilterChange('discountMin', e.target.value)}
+                      min={filterOptions?.discount_range.min}
+                      max={filterOptions?.discount_range.max}
+                      placeholder="0.00"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Discount Max */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Max Discount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={filterConfig.discountMax}
+                      onChange={(e) => handleFilterChange('discountMax', e.target.value)}
+                      min={filterOptions?.discount_range.min}
+                      max={filterOptions?.discount_range.max}
+                      placeholder="99.99"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Filter Actions */}
+                <div className="flex items-center justify-end gap-2 mt-4">
+                  <button
+                    onClick={clearFilters}
+                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    onClick={applyFilters}
+                    className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {receipts.length === 0 && allReceipts.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -894,24 +1349,18 @@ export default function Supermarket() {
                 <p className="text-lg font-medium text-gray-900 mb-2">No receipts yet</p>
                 <p className="text-gray-600">Upload your first PDF receipt to get started</p>
               </div>
+            ) : receipts.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-yellow-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-.553.894l-2 1A1 1 0 0110 20v-5.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                </div>
+                <p className="text-lg font-medium text-gray-900 mb-2">No receipts match your filters</p>
+                <p className="text-gray-600">Try adjusting your filter criteria or clear all filters</p>
+              </div>
             ) : (
               <>
-                {/* Action Bar */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
-                  <div className="text-sm text-gray-600">
-                    {receipts.length} receipts on this page
-                  </div>
-                  <button
-                    onClick={exportToCSV}
-                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Export CSV
-                  </button>
-                </div>
-                
                 <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
                   <table className="w-full text-sm text-left text-gray-500">
                   <thead className="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0 z-10">
@@ -924,17 +1373,125 @@ export default function Supermarket() {
                           className="rounded border-gray-300 text-green-600 focus:ring-green-500"
                         />
                       </th>
-                      <th scope="col" className="px-6 py-3">Date</th>
-                      <th scope="col" className="px-6 py-3">Market</th>
-                      <th scope="col" className="px-6 py-3">Branch</th>
-                      <th scope="col" className="px-6 py-3">Total Amount</th>
                       <th scope="col" className="px-6 py-3">
-                        <div className="flex items-center gap-1">
-                          <span>Total Discount</span>
-                          <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                          </svg>
-                        </div>
+                        <button
+                          onClick={() => handleSort('date')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          Date
+                          {sortConfig.field === 'date' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'date' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
+                      </th>
+                      <th scope="col" className="px-6 py-3">
+                        <button
+                          onClick={() => handleSort('market')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          Market
+                          {sortConfig.field === 'market' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'market' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
+                      </th>
+                      <th scope="col" className="px-6 py-3">
+                        <button
+                          onClick={() => handleSort('branch')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          Branch
+                          {sortConfig.field === 'branch' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'branch' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
+                      </th>
+                      <th scope="col" className="px-6 py-3">
+                        <button
+                          onClick={() => handleSort('total')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          Total Amount
+                          {sortConfig.field === 'total' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'total' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
+                      </th>
+                      <th scope="col" className="px-6 py-3">
+                        <button
+                          onClick={() => handleSort('total_discount')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Total Discount</span>
+                            <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                          </div>
+                          {sortConfig.field === 'total_discount' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'total_discount' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
                       </th>
                       <th scope="col" className="px-6 py-3">Actions</th>
                     </tr>

@@ -108,3 +108,12 @@ class PaginatedReceipts(BaseModel):
     pages: int
     has_next: bool
     has_prev: bool
+
+
+class ReceiptFilterOptions(BaseModel):
+    """Available filter options for receipts"""
+    markets: List[str]
+    branches: List[str]
+    date_range: dict  # {"min": "2024-01-01", "max": "2024-12-31"}
+    total_range: dict  # {"min": 0.0, "max": 500.0}
+    discount_range: dict  # {"min": 0.0, "max": 100.0"}

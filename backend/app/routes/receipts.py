@@ -1,16 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, asc, desc
 from datetime import datetime, date, timedelta
-from typing import List
+from typing import List, Optional
 import httpx
 import logging
 import io
 import csv
 from ..database import get_db, init_database
 from ..models import Receipt, ReceiptProduct, User
-from ..schemas import Receipt as ReceiptSchema, ReceiptUploadResponse, SpendingSummary, PaginatedReceipts
+from ..schemas import Receipt as ReceiptSchema, ReceiptUploadResponse, SpendingSummary, PaginatedReceipts, ReceiptFilterOptions
 from .auth import get_current_user
 
 logging.basicConfig(level=logging.INFO)
@@ -301,21 +301,78 @@ async def upload_receipts(
 def get_receipts(
     page: int = 1,
     per_page: int = 25,
+    sort_by: Optional[str] = Query(None, description="Field to sort by: date, market, branch, total, total_discount"),
+    sort_order: Optional[str] = Query("desc", description="Sort order: asc or desc"),
+    filter_market: Optional[str] = Query(None, description="Filter by market name"),
+    filter_branch: Optional[str] = Query(None, description="Filter by branch name"),
+    filter_date_from: Optional[date] = Query(None, description="Filter receipts from this date"),
+    filter_date_to: Optional[date] = Query(None, description="Filter receipts until this date"),
+    filter_total_min: Optional[float] = Query(None, description="Filter receipts with total amount greater than or equal to this value"),
+    filter_total_max: Optional[float] = Query(None, description="Filter receipts with total amount less than or equal to this value"),
+    filter_discount_min: Optional[float] = Query(None, description="Filter receipts with total discount greater than or equal to this value"),
+    filter_discount_max: Optional[float] = Query(None, description="Filter receipts with total discount less than or equal to this value"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get user's receipts with pagination"""
+    """Get user's receipts with pagination, sorting, and filtering"""
     page = max(1, page)
-    per_page = min(max(1, per_page), 100)
+    per_page = min(max(1, per_page), 10000)  # Increased limit to handle all receipts for client-side operations
 
     skip = (page - 1) * per_page
 
-    total = db.query(Receipt).filter(
-        Receipt.user_id == current_user.id).count()
+    # Build the base query
+    query = db.query(Receipt).filter(Receipt.user_id == current_user.id)
 
-    receipts = db.query(Receipt).options(selectinload(Receipt.products)).filter(
-        Receipt.user_id == current_user.id
-    ).order_by(Receipt.date.desc()).offset(skip).limit(per_page).all()
+    # Apply filters
+    if filter_market:
+        query = query.filter(Receipt.market.ilike(f"%{filter_market}%"))
+    
+    if filter_branch:
+        query = query.filter(Receipt.branch.ilike(f"%{filter_branch}%"))
+    
+    if filter_date_from:
+        query = query.filter(Receipt.date >= filter_date_from)
+    
+    if filter_date_to:
+        query = query.filter(Receipt.date <= filter_date_to)
+    
+    if filter_total_min is not None:
+        query = query.filter(Receipt.total_paid >= filter_total_min)
+    
+    if filter_total_max is not None:
+        query = query.filter(Receipt.total_paid <= filter_total_max)
+    
+    if filter_discount_min is not None:
+        query = query.filter(Receipt.total_discount >= filter_discount_min)
+    
+    if filter_discount_max is not None:
+        query = query.filter(Receipt.total_discount <= filter_discount_max)
+
+    # Get total count with filters applied
+    total = query.count()
+
+    # Apply sorting
+    if sort_by:
+        order_func = desc if sort_order == "desc" else asc
+        if sort_by == "date":
+            query = query.order_by(order_func(Receipt.date))
+        elif sort_by == "market":
+            query = query.order_by(order_func(Receipt.market))
+        elif sort_by == "branch":
+            query = query.order_by(order_func(Receipt.branch))
+        elif sort_by == "total":
+            query = query.order_by(order_func(Receipt.total_paid))
+        elif sort_by == "total_discount":
+            query = query.order_by(order_func(Receipt.total_discount))
+        else:
+            # Default sort by date desc if invalid sort_by provided
+            query = query.order_by(desc(Receipt.date))
+    else:
+        # Default sort by date desc
+        query = query.order_by(desc(Receipt.date))
+
+    # Apply pagination and load products
+    receipts = query.options(selectinload(Receipt.products)).offset(skip).limit(per_page).all()
 
     pages = (total + per_page - 1) // per_page
     has_next = page < pages
@@ -449,6 +506,62 @@ def get_spending_summary(
         receipt_count=receipt_count,
         average_per_receipt=average_per_receipt,
         top_categories=top_categories
+    )
+
+
+@router.get("/filter-options", response_model=ReceiptFilterOptions)
+def get_filter_options(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get available filter options for receipts"""
+    # Get unique markets
+    markets = db.query(Receipt.market).filter(Receipt.user_id == current_user.id).distinct().all()
+    markets = [market[0] for market in markets if market[0]]
+    
+    # Get unique branches
+    branches = db.query(Receipt.branch).filter(Receipt.user_id == current_user.id).distinct().all()
+    branches = [branch[0] for branch in branches if branch[0]]
+    
+    # Get date range
+    date_query = db.query(
+        func.min(Receipt.date).label('min_date'),
+        func.max(Receipt.date).label('max_date')
+    ).filter(Receipt.user_id == current_user.id).first()
+    
+    date_range = {
+        "min": date_query.min_date.isoformat() if date_query.min_date else None,
+        "max": date_query.max_date.isoformat() if date_query.max_date else None
+    }
+    
+    # Get total range
+    total_query = db.query(
+        func.min(Receipt.total_paid).label('min_total'),
+        func.max(Receipt.total_paid).label('max_total')
+    ).filter(Receipt.user_id == current_user.id).first()
+    
+    total_range = {
+        "min": float(total_query.min_total) if total_query.min_total else 0.0,
+        "max": float(total_query.max_total) if total_query.max_total else 0.0
+    }
+    
+    # Get discount range
+    discount_query = db.query(
+        func.min(Receipt.total_discount).label('min_discount'),
+        func.max(Receipt.total_discount).label('max_discount')
+    ).filter(Receipt.user_id == current_user.id).first()
+    
+    discount_range = {
+        "min": float(discount_query.min_discount) if discount_query.min_discount else 0.0,
+        "max": float(discount_query.max_discount) if discount_query.max_discount else 0.0
+    }
+    
+    return ReceiptFilterOptions(
+        markets=sorted(markets),
+        branches=sorted(branches),
+        date_range=date_range,
+        total_range=total_range,
+        discount_range=discount_range
     )
 
 
@@ -928,28 +1041,28 @@ def export_receipts_csv(
     current_user: User = Depends(get_current_user)
 ):
     """Export all user's receipts as CSV file"""
-    
+
     # Get all receipts for the current user with products
     receipts = db.query(Receipt).options(selectinload(Receipt.products)).filter(
         Receipt.user_id == current_user.id
     ).order_by(Receipt.date.desc()).all()
-    
+
     # Create CSV content in memory
     output = io.StringIO()
     writer = csv.writer(output)
-    
+
     # Write header
     writer.writerow([
         'Date',
-        'Market', 
+        'Market',
         'Branch',
         'Invoice',
         'Total Amount',
-        'Total Discount', 
+        'Total Discount',
         'Total Paid',
         'Products (Type||Name||Qty||Price||Disc1||Disc2||Total, separated by |)'
     ])
-    
+
     # Write data rows
     for receipt in receipts:
         if receipt.products:
@@ -957,16 +1070,19 @@ def export_receipts_csv(
             # Format: product_type||product_name||quantity||price||discount||discount2||total
             product_lines = []
             for product in receipt.products:
-                product_total = (product.price * product.quantity) - (product.discount + product.discount2)
+                product_total = (product.price * product.quantity) - \
+                    (product.discount + product.discount2)
                 # Clean product data to avoid encoding issues
-                clean_product_type = (product.product_type or "").replace("||", "|").replace("|", "-")
-                clean_product_name = (product.product or "").replace("||", "|").replace("|", "-")
+                clean_product_type = (product.product_type or "").replace(
+                    "||", "|").replace("|", "-")
+                clean_product_name = (product.product or "").replace(
+                    "||", "|").replace("|", "-")
                 product_line = f"{clean_product_type}||{clean_product_name}||{product.quantity:.2f}||{product.price:.2f}||{product.discount:.2f}||{product.discount2:.2f}||{product_total:.2f}"
                 product_lines.append(product_line)
-            
+
             # Join all product lines with | separator
             all_products = '|'.join(product_lines)
-            
+
             writer.writerow([
                 receipt.date.strftime('%Y-%m-%d'),
                 receipt.market,
@@ -989,14 +1105,14 @@ def export_receipts_csv(
                 f"{receipt.total_paid:.2f}",
                 ''  # Empty products column
             ])
-    
+
     # Get CSV content
     csv_content = output.getvalue()
     output.close()
-    
+
     # Generate filename with current date
     filename = f"supermarket_receipts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    
+
     # Create streaming response with proper UTF-8 encoding
     return StreamingResponse(
         io.BytesIO(csv_content.encode('utf-8-sig')),
