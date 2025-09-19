@@ -5,19 +5,17 @@ import { useRouter } from 'next/router';
 import { formatCurrency, formatDate } from '../utils/formatting';
 import { outlookApi } from '../lib/api';
 
-// API configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
 
-// Types for the API data
 interface Receipt {
   id: number;
   market: string;
   branch: string;
   invoice?: string;
   date: string;
-  total: number;  // Total before discounts
-  total_discount?: number;  // Total discount amount
-  total_paid: number;  // Total amount paid (after discounts)
+  total: number;
+  total_discount?: number;
+  total_paid: number;
   user_id: number;
   products?: ReceiptProduct[];
 }
@@ -53,17 +51,43 @@ interface SpendingSummary {
   top_categories: Array<{ category: string; amount: number }>;
 }
 
+interface SortConfig {
+  field: 'date' | 'market' | 'branch' | 'total' | 'total_discount' | null;
+  direction: 'asc' | 'desc';
+}
+
+interface FilterConfig {
+  market: string;
+  branch: string;
+  dateFrom: string;
+  dateTo: string;
+  totalMin: string;
+  totalMax: string;
+  discountMin: string;
+  discountMax: string;
+}
+
+interface FilterOptions {
+  markets: string[];
+  branches: string[];
+  date_range: { min: string | null; max: string | null };
+  total_range: { min: number; max: number };
+  discount_range: { min: number; max: number };
+}
+
 export default function Supermarket() {
   const { isAuthenticated, user, checkAuth } = useAuthStore();
   const router = useRouter();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [allReceipts, setAllReceipts] = useState<Receipt[]>([]);
+  const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
   const [paginationData, setPaginationData] = useState<PaginatedReceipts | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [spendingSummary, setSpendingSummary] = useState<SpendingSummary | null>(null);
   const [selectedReceipts, setSelectedReceipts] = useState<number[]>([]);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [showReceiptDetails, setShowReceiptDetails] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +100,20 @@ export default function Supermarket() {
     completed_steps: number;
   } | null>(null);
 
-  // Check authentication on component mount
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'date', direction: 'desc' });
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>({
+    market: '',
+    branch: '',
+    dateFrom: '',
+    dateTo: '',
+    totalMin: '',
+    totalMax: '',
+    discountMin: '',
+    discountMax: ''
+  });
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -88,19 +125,17 @@ export default function Supermarket() {
     initAuth();
   }, [checkAuth]);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (!isAuthenticated && !loading) {
       router.push('/login');
       return;
     }
     if (isAuthenticated) {
-      setCurrentPage(1); // Reset to first page when data changes
+      setCurrentPage(1);
       loadData(1);
     }
-  }, [isAuthenticated, router, selectedMonth]); // Add selectedMonth dependency
+  }, [isAuthenticated, router, selectedMonth]);
 
-  // Check for Outlook connection and start sync
   useEffect(() => {
     console.log('Supermarket useEffect - outlook_connected check:', {
       isAuthenticated,
@@ -110,26 +145,28 @@ export default function Supermarket() {
 
     if (isAuthenticated && router.query.outlook_connected === 'true') {
       console.log('Outlook connected detected, starting sync...');
-      // Clear the query parameter
       router.replace('/supermarket', undefined, { shallow: true });
-      // Start Outlook sync
       syncOutlookEmails();
     }
   }, [isAuthenticated, router.query]);
 
-  // Ensure loading state is cleared after a reasonable time
   useEffect(() => {
     if (loading) {
       const timeout = setTimeout(() => {
         console.log('Loading timeout reached, clearing loading state');
         setLoading(false);
-      }, 30000); // 30 seconds timeout
+      }, 30000);
 
       return () => clearTimeout(timeout);
     }
   }, [loading]);
 
-  // Load receipts and spending summary
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadFilterOptions();
+    }
+  }, [isAuthenticated]);
+
   const loadData = async (page: number = 1) => {
     if (!isAuthenticated) {
       setError('Please log in to view receipts');
@@ -149,8 +186,7 @@ export default function Supermarket() {
         return;
       }
 
-      // Load receipts with pagination
-      const receiptsResponse = await fetch(`${API_BASE_URL}/receipts/?page=${page}&per_page=25`, {
+      const receiptsResponse = await fetch(`${API_BASE_URL}/receipts/?page=1&per_page=10000`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -167,11 +203,28 @@ export default function Supermarket() {
       }
 
       const receiptsData: PaginatedReceipts = await receiptsResponse.json();
-      setReceipts(receiptsData.items);
-      setPaginationData(receiptsData);
+      setAllReceipts(receiptsData.items);
+      
+      const processedReceipts = applySortingAndFiltering(receiptsData.items);
+      setFilteredReceipts(processedReceipts);
+      
+      const startIndex = (page - 1) * 25;
+      const endIndex = startIndex + 25;
+      setReceipts(processedReceipts.slice(startIndex, endIndex));
+      
+      const totalFiltered = processedReceipts.length;
+      const totalPages = Math.ceil(totalFiltered / 25);
+      setPaginationData({
+        items: processedReceipts.slice(startIndex, endIndex),
+        total: totalFiltered,
+        page: page,
+        per_page: 25,
+        pages: totalPages,
+        has_next: page < totalPages,
+        has_prev: page > 1
+      });
       setCurrentPage(page);
 
-      // Load spending summary for selected month
       const [year, month] = selectedMonth.split('-');
       console.log(`Loading summary for ${year}-${month}`);
       
@@ -201,7 +254,190 @@ export default function Supermarket() {
     }
   };
 
-  // Sync Outlook emails and process receipts
+  const loadFilterOptions = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/receipts/filter-options`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const options: FilterOptions = await response.json();
+        setFilterOptions(options);
+      }
+    } catch (error) {
+      console.error('Error loading filter options:', error);
+    }
+  };
+
+  const applySortingAndFiltering = (receiptsToProcess: Receipt[], customSortConfig?: SortConfig) => {
+    let processed = [...receiptsToProcess];
+
+    const activeSortConfig = customSortConfig || sortConfig;
+
+    if (filterConfig.market) {
+      processed = processed.filter(receipt => 
+        receipt.market.toLowerCase().includes(filterConfig.market.toLowerCase())
+      );
+    }
+    
+    if (filterConfig.branch) {
+      processed = processed.filter(receipt => 
+        receipt.branch?.toLowerCase().includes(filterConfig.branch.toLowerCase())
+      );
+    }
+    
+    if (filterConfig.dateFrom) {
+      processed = processed.filter(receipt => 
+        new Date(receipt.date) >= new Date(filterConfig.dateFrom)
+      );
+    }
+    
+    if (filterConfig.dateTo) {
+      processed = processed.filter(receipt => 
+        new Date(receipt.date) <= new Date(filterConfig.dateTo)
+      );
+    }
+    
+    if (filterConfig.totalMin) {
+      processed = processed.filter(receipt => 
+        receipt.total_paid >= parseFloat(filterConfig.totalMin)
+      );
+    }
+    
+    if (filterConfig.totalMax) {
+      processed = processed.filter(receipt => 
+        receipt.total_paid <= parseFloat(filterConfig.totalMax)
+      );
+    }
+    
+    if (filterConfig.discountMin) {
+      processed = processed.filter(receipt => {
+        const totalDiscount = receipt.products ? receipt.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
+        return totalDiscount >= parseFloat(filterConfig.discountMin);
+      });
+    }
+    
+    if (filterConfig.discountMax) {
+      processed = processed.filter(receipt => {
+        const totalDiscount = receipt.products ? receipt.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
+        return totalDiscount <= parseFloat(filterConfig.discountMax);
+      });
+    }
+
+    if (activeSortConfig.field) {
+      processed.sort((a, b) => {
+        let aValue: any, bValue: any;
+        
+        switch (activeSortConfig.field) {
+          case 'date':
+            aValue = new Date(a.date);
+            bValue = new Date(b.date);
+            break;
+          case 'market':
+            aValue = a.market.toLowerCase();
+            bValue = b.market.toLowerCase();
+            break;
+          case 'branch':
+            aValue = (a.branch || '').toLowerCase();
+            bValue = (b.branch || '').toLowerCase();
+            break;
+          case 'total':
+            aValue = a.total_paid;
+            bValue = b.total_paid;
+            break;
+          case 'total_discount':
+            aValue = a.products ? a.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
+            bValue = b.products ? b.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
+            break;
+          default:
+            return 0;
+        }
+        
+        if (aValue < bValue) return activeSortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return activeSortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return processed;
+  };
+
+  const handleSort = (field: SortConfig['field']) => {
+    if (!field) return;
+    
+    const newDirection: 'asc' | 'desc' = sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc';
+    const newSortConfig = { field, direction: newDirection };
+    setSortConfig(newSortConfig);
+    
+    const processedReceipts = applySortingAndFiltering(allReceipts, newSortConfig);
+    setFilteredReceipts(processedReceipts);
+    
+    const startIndex = 0;
+    const endIndex = 25;
+    setReceipts(processedReceipts.slice(startIndex, endIndex));
+    setCurrentPage(1);
+    
+    const totalFiltered = processedReceipts.length;
+    const totalPages = Math.ceil(totalFiltered / 25);
+    setPaginationData({
+      items: processedReceipts.slice(startIndex, endIndex),
+      total: totalFiltered,
+      page: 1,
+      per_page: 25,
+      pages: totalPages,
+      has_next: 1 < totalPages,
+      has_prev: false
+    });
+  };
+
+  const handleFilterChange = (filterField: keyof FilterConfig, value: string) => {
+    setFilterConfig(prev => ({
+      ...prev,
+      [filterField]: value
+    }));
+  };
+
+  const clearFilters = () => {
+    setFilterConfig({
+      market: '',
+      branch: '',
+      dateFrom: '',
+      dateTo: '',
+      totalMin: '',
+      totalMax: '',
+      discountMin: '',
+      discountMax: ''
+    });
+  };
+
+  const applyFilters = () => {
+    const processedReceipts = applySortingAndFiltering(allReceipts);
+    setFilteredReceipts(processedReceipts);
+    
+    const startIndex = 0;
+    const endIndex = 25;
+    setReceipts(processedReceipts.slice(startIndex, endIndex));
+    setCurrentPage(1);
+    
+    const totalFiltered = processedReceipts.length;
+    const totalPages = Math.ceil(totalFiltered / 25);
+    setPaginationData({
+      items: processedReceipts.slice(startIndex, endIndex),
+      total: totalFiltered,
+      page: 1,
+      per_page: 25,
+      pages: totalPages,
+      has_next: 1 < totalPages,
+      has_prev: false
+    });
+  };
+
   const syncOutlookEmails = async () => {
     try {
       setIsImporting(true);
@@ -210,21 +446,17 @@ export default function Supermarket() {
 
       console.log('Starting Outlook sync...');
 
-      // Start the sync process (no await - let it run in background)
       const syncPromise = outlookApi.sync();
       
-      // Poll for progress updates
       const progressInterval = setInterval(async () => {
         try {
           const progressResponse = await outlookApi.getSyncProgress();
           const progress = progressResponse.data;
           setSyncProgress(progress);
           
-          // Stop polling when sync is completed or errored
           if (progress.status === 'completed' || progress.status === 'error') {
             clearInterval(progressInterval);
             if (progress.status === 'completed') {
-              // Reload data after successful sync
               await loadData(currentPage);
               setError(null);
             } else {
@@ -236,9 +468,8 @@ export default function Supermarket() {
         } catch (progressError) {
           console.error('Error getting sync progress:', progressError);
         }
-      }, 1000); // Poll every second
+      }, 1000);
 
-      // Handle the main sync promise
       try {
         const response = await syncPromise;
         console.log('Outlook sync response:', response.data);
@@ -251,7 +482,6 @@ export default function Supermarket() {
         setSyncProgress(null);
       }
 
-      // Cleanup timeout
       setTimeout(() => {
         clearInterval(progressInterval);
         if (isImporting) {
@@ -259,7 +489,7 @@ export default function Supermarket() {
           setIsImporting(false);
           setSyncProgress(null);
         }
-      }, 120000); // 2 minutes timeout
+      }, 120000);
 
     } catch (err) {
       console.error('Error starting Outlook sync:', err);
@@ -270,7 +500,6 @@ export default function Supermarket() {
     }
   };
 
-  // Handle file upload
   const handleFileUpload = async (files: FileList) => {
     if (!isAuthenticated) {
       setError('Please log in to upload receipts');
@@ -294,8 +523,7 @@ export default function Supermarket() {
       
       setUploadProgress([`Starting upload of ${totalFiles} file(s)...`]);
 
-      // Process files in batches to avoid overwhelming the server
-      const batchSize = Math.min(10, totalFiles); // Max 10 files per batch
+      const batchSize = Math.min(10, totalFiles);
       const batches = [];
       
       for (let i = 0; i < filesArray.length; i += batchSize) {
@@ -315,11 +543,10 @@ export default function Supermarket() {
           formData.append('files', file);
         });
 
-        // Create AbortController for timeout handling
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
           controller.abort();
-        }, 180000); // 3 minutes per batch
+        }, 180000);
 
         try {
           const response = await fetch(`${API_BASE_URL}/receipts/upload`, {
@@ -360,12 +587,10 @@ export default function Supermarket() {
         }
       }
 
-      // Final summary
       setUploadProgress(prev => [...prev, 
         `\n📊 Final Results: ${successCount} successful, ${failureCount} failed out of ${totalFiles} total`
       ]);
 
-      // Show individual results for failed files
       const failedResults = allResults.filter((r: any) => !r.success);
       if (failedResults.length > 0) {
         setUploadProgress(prev => [...prev, '\n❌ Failed files:']);
@@ -374,7 +599,6 @@ export default function Supermarket() {
         });
       }
 
-      // Reload data after successful upload
       if (successCount > 0) {
         await loadData(currentPage);
       }
@@ -392,7 +616,6 @@ export default function Supermarket() {
     }
   };
 
-  // Handle receipt selection
   const toggleReceiptSelection = (receiptId: number) => {
     setSelectedReceipts(prev =>
       prev.includes(receiptId)
@@ -409,7 +632,6 @@ export default function Supermarket() {
     setSelectedReceipts([]);
   };
 
-  // Delete receipts
   const deleteSelectedReceipts = async () => {
     if (!selectedReceipts.length) return;
 
@@ -426,7 +648,6 @@ export default function Supermarket() {
       let successCount = 0;
       let detailedErrors: string[] = [];
 
-      // Delete each selected receipt
       for (const receiptId of selectedReceipts) {
         try {
           const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}`, {
@@ -475,7 +696,6 @@ export default function Supermarket() {
     }
   };
 
-  // View receipt details
   const viewReceiptDetails = async (receiptId: number) => {
     try {
       const token = localStorage.getItem('access_token');
@@ -503,7 +723,6 @@ export default function Supermarket() {
     }
   };
 
-  // Calculate total discount for a receipt
   const calculateTotalDiscount = (receipt: Receipt): number => {
     if (!receipt.products || receipt.products.length === 0) return 0;
     return receipt.products.reduce((total, product) => {
@@ -511,7 +730,6 @@ export default function Supermarket() {
     }, 0);
   };
 
-  // Export receipts to CSV
   const exportToCSV = async () => {
     try {
       const token = localStorage.getItem('access_token');
@@ -530,7 +748,6 @@ export default function Supermarket() {
         throw new Error('Failed to export receipts');
       }
 
-      // Get the blob and create a download
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -546,11 +763,22 @@ export default function Supermarket() {
     }
   };
 
-  // Pagination functions
-  const handlePageChange = async (page: number) => {
+  const handlePageChange = (page: number) => {
     if (page >= 1 && page <= (paginationData?.pages || 1)) {
-      setSelectedReceipts([]); // Clear selection when changing pages
-      await loadData(page);
+      setSelectedReceipts([]);
+      
+      const startIndex = (page - 1) * 25;
+      const endIndex = startIndex + 25;
+      setReceipts(filteredReceipts.slice(startIndex, endIndex));
+      setCurrentPage(page);
+      
+      setPaginationData(prev => prev ? {
+        ...prev,
+        page: page,
+        has_next: page < prev.pages,
+        has_prev: page > 1,
+        items: filteredReceipts.slice(startIndex, endIndex)
+      } : null);
     }
   };
 
@@ -561,7 +789,6 @@ export default function Supermarket() {
     const currentPage = paginationData.page;
     const totalPages = paginationData.pages;
 
-    // Always show first page
     if (currentPage > 3) {
       pages.push(1);
       if (currentPage > 4) {
@@ -569,12 +796,10 @@ export default function Supermarket() {
       }
     }
 
-    // Show pages around current page
     for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
       pages.push(i);
     }
 
-    // Always show last page
     if (currentPage < totalPages - 2) {
       if (currentPage < totalPages - 3) {
         pages.push('...');
@@ -816,7 +1041,7 @@ export default function Supermarket() {
             {uploadProgress.length > 0 && (
               <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
                 {uploadProgress.map((message, index) => {
-                  let bgColor = 'bg-blue-50 text-blue-700'; // default
+                  let bgColor = 'bg-blue-50 text-blue-700';
                   
                   if (message.includes('successfully') || message.includes('success') || message.includes('✅')) {
                     bgColor = 'bg-green-50 text-green-700';
@@ -884,7 +1109,177 @@ export default function Supermarket() {
             )}
           </div>
           <div className="card-content">
-            {receipts.length === 0 ? (
+            {/* Action Bar - Always visible */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-gray-600">
+                  {filteredReceipts.length} receipts total • {receipts.length} on this page
+                </div>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-3 py-1 text-sm rounded-lg transition-colors flex items-center gap-2 ${
+                    showFilters 
+                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-.553.894l-2 1A1 1 0 0110 20v-5.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Filters
+                </button>
+              </div>
+              <button
+                onClick={exportToCSV}
+                className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export CSV
+              </button>
+            </div>
+
+            {/* Filter Panel - Always available when toggled */}
+            {showFilters && (
+              <div className="p-4 bg-gray-50 border-b border-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Market Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Market</label>
+                    <select
+                      value={filterConfig.market}
+                      onChange={(e) => handleFilterChange('market', e.target.value)}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All Markets</option>
+                      {filterOptions?.markets.map(market => (
+                        <option key={market} value={market}>{market}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Branch Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Branch</label>
+                    <select
+                      value={filterConfig.branch}
+                      onChange={(e) => handleFilterChange('branch', e.target.value)}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All Branches</option>
+                      {filterOptions?.branches.map(branch => (
+                        <option key={branch} value={branch}>{branch}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Date From */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Date From</label>
+                    <input
+                      type="date"
+                      value={filterConfig.dateFrom}
+                      onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
+                      min={filterOptions?.date_range.min || undefined}
+                      max={filterOptions?.date_range.max || undefined}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Date To */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Date To</label>
+                    <input
+                      type="date"
+                      value={filterConfig.dateTo}
+                      onChange={(e) => handleFilterChange('dateTo', e.target.value)}
+                      min={filterOptions?.date_range.min || undefined}
+                      max={filterOptions?.date_range.max || undefined}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Total Min */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Min Amount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={filterConfig.totalMin}
+                      onChange={(e) => handleFilterChange('totalMin', e.target.value)}
+                      min={filterOptions?.total_range.min}
+                      max={filterOptions?.total_range.max}
+                      placeholder="0.00"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Total Max */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Max Amount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={filterConfig.totalMax}
+                      onChange={(e) => handleFilterChange('totalMax', e.target.value)}
+                      min={filterOptions?.total_range.min}
+                      max={filterOptions?.total_range.max}
+                      placeholder="999.99"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Discount Min */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Min Discount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={filterConfig.discountMin}
+                      onChange={(e) => handleFilterChange('discountMin', e.target.value)}
+                      min={filterOptions?.discount_range.min}
+                      max={filterOptions?.discount_range.max}
+                      placeholder="0.00"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Discount Max */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Max Discount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={filterConfig.discountMax}
+                      onChange={(e) => handleFilterChange('discountMax', e.target.value)}
+                      min={filterOptions?.discount_range.min}
+                      max={filterOptions?.discount_range.max}
+                      placeholder="99.99"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Filter Actions */}
+                <div className="flex items-center justify-end gap-2 mt-4">
+                  <button
+                    onClick={clearFilters}
+                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    onClick={applyFilters}
+                    className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {receipts.length === 0 && allReceipts.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -894,24 +1289,18 @@ export default function Supermarket() {
                 <p className="text-lg font-medium text-gray-900 mb-2">No receipts yet</p>
                 <p className="text-gray-600">Upload your first PDF receipt to get started</p>
               </div>
+            ) : receipts.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-yellow-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-.553.894l-2 1A1 1 0 0110 20v-5.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                </div>
+                <p className="text-lg font-medium text-gray-900 mb-2">No receipts match your filters</p>
+                <p className="text-gray-600">Try adjusting your filter criteria or clear all filters</p>
+              </div>
             ) : (
               <>
-                {/* Action Bar */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
-                  <div className="text-sm text-gray-600">
-                    {receipts.length} receipts on this page
-                  </div>
-                  <button
-                    onClick={exportToCSV}
-                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Export CSV
-                  </button>
-                </div>
-                
                 <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
                   <table className="w-full text-sm text-left text-gray-500">
                   <thead className="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0 z-10">
@@ -924,17 +1313,125 @@ export default function Supermarket() {
                           className="rounded border-gray-300 text-green-600 focus:ring-green-500"
                         />
                       </th>
-                      <th scope="col" className="px-6 py-3">Date</th>
-                      <th scope="col" className="px-6 py-3">Market</th>
-                      <th scope="col" className="px-6 py-3">Branch</th>
-                      <th scope="col" className="px-6 py-3">Total Amount</th>
                       <th scope="col" className="px-6 py-3">
-                        <div className="flex items-center gap-1">
-                          <span>Total Discount</span>
-                          <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                          </svg>
-                        </div>
+                        <button
+                          onClick={() => handleSort('date')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          Date
+                          {sortConfig.field === 'date' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'date' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
+                      </th>
+                      <th scope="col" className="px-6 py-3">
+                        <button
+                          onClick={() => handleSort('market')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          Market
+                          {sortConfig.field === 'market' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'market' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
+                      </th>
+                      <th scope="col" className="px-6 py-3">
+                        <button
+                          onClick={() => handleSort('branch')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          Branch
+                          {sortConfig.field === 'branch' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'branch' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
+                      </th>
+                      <th scope="col" className="px-6 py-3">
+                        <button
+                          onClick={() => handleSort('total')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          Total Amount
+                          {sortConfig.field === 'total' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'total' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
+                      </th>
+                      <th scope="col" className="px-6 py-3">
+                        <button
+                          onClick={() => handleSort('total_discount')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Total Discount</span>
+                            <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                          </div>
+                          {sortConfig.field === 'total_discount' && (
+                            <svg 
+                              className={`w-4 h-4 transition-transform ${sortConfig.direction === 'desc' ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                          {sortConfig.field !== 'total_discount' && (
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                            </svg>
+                          )}
+                        </button>
                       </th>
                       <th scope="col" className="px-6 py-3">Actions</th>
                     </tr>
