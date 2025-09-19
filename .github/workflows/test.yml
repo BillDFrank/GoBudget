@@ -37,6 +37,9 @@ jobs:
         env:
           JWT_SECRET: "test-secret-for-import-only"
           DATABASE_URL: "postgresql://test:test@localhost:5432/test"
+          OUTLOOK_CLIENT_ID: "test-client-id"
+          OUTLOOK_TENANT_ID: "consumers"
+          OUTLOOK_REDIRECT_URI: "https://login.microsoftonline.com/common/oauth2/nativeclient"
         run: |
           echo 'Checking Python syntax and imports...'
           python -m py_compile backend/app/main.py
