@@ -51,7 +51,7 @@ jobs:
       - name: Test Docker configuration syntax
         run: |
           echo 'Testing Docker configuration syntax...'
-          docker-compose config --quiet
+          docker compose config --quiet
           echo 'Docker Compose configuration is valid!'
 
       - name: Cleanup
