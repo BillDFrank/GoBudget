@@ -301,54 +301,55 @@ async def upload_receipts(
 def get_receipts(
     page: int = 1,
     per_page: int = 25,
-    sort_by: Optional[str] = Query(None, description="Field to sort by: date, market, branch, total, total_discount"),
-    sort_order: Optional[str] = Query("desc", description="Sort order: asc or desc"),
-    filter_market: Optional[str] = Query(None, description="Filter by market name"),
-    filter_branch: Optional[str] = Query(None, description="Filter by branch name"),
-    filter_date_from: Optional[date] = Query(None, description="Filter receipts from this date"),
-    filter_date_to: Optional[date] = Query(None, description="Filter receipts until this date"),
-    filter_total_min: Optional[float] = Query(None, description="Filter receipts with total amount greater than or equal to this value"),
-    filter_total_max: Optional[float] = Query(None, description="Filter receipts with total amount less than or equal to this value"),
-    filter_discount_min: Optional[float] = Query(None, description="Filter receipts with total discount greater than or equal to this value"),
-    filter_discount_max: Optional[float] = Query(None, description="Filter receipts with total discount less than or equal to this value"),
+    sort_by: Optional[str] = Query(
+        None, description="Field to sort by: date, market, branch, total, total_discount"),
+    sort_order: Optional[str] = Query(
+        "desc", description="Sort order: asc or desc"),
+    filter_market: Optional[str] = Query(
+        None, description="Filter by market name"),
+    filter_branch: Optional[str] = Query(
+        None, description="Filter by branch name"),
+    filter_date_from: Optional[date] = Query(
+        None, description="Filter receipts from this date"),
+    filter_date_to: Optional[date] = Query(
+        None, description="Filter receipts until this date"),
+    filter_total_min: Optional[float] = Query(
+        None, description="Filter receipts with total amount greater than or equal to this value"),
+    filter_total_max: Optional[float] = Query(
+        None, description="Filter receipts with total amount less than or equal to this value"),
+    filter_discount_min: Optional[float] = Query(
+        None, description="Filter receipts with total discount greater than or equal to this value"),
+    filter_discount_max: Optional[float] = Query(
+        None, description="Filter receipts with total discount less than or equal to this value"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Get user's receipts with pagination, sorting, and filtering"""
     page = max(1, page)
-    per_page = min(max(1, per_page), 10000)  # Increased limit to handle all receipts for client-side operations
+    per_page = min(max(1, per_page), 10000)
 
     skip = (page - 1) * per_page
 
-    # Build the base query
     query = db.query(Receipt).filter(Receipt.user_id == current_user.id)
 
     # Apply filters
     if filter_market:
         query = query.filter(Receipt.market.ilike(f"%{filter_market}%"))
-    
     if filter_branch:
         query = query.filter(Receipt.branch.ilike(f"%{filter_branch}%"))
-    
     if filter_date_from:
         query = query.filter(Receipt.date >= filter_date_from)
-    
     if filter_date_to:
         query = query.filter(Receipt.date <= filter_date_to)
-    
     if filter_total_min is not None:
         query = query.filter(Receipt.total_paid >= filter_total_min)
-    
     if filter_total_max is not None:
         query = query.filter(Receipt.total_paid <= filter_total_max)
-    
     if filter_discount_min is not None:
         query = query.filter(Receipt.total_discount >= filter_discount_min)
-    
     if filter_discount_max is not None:
         query = query.filter(Receipt.total_discount <= filter_discount_max)
 
-    # Get total count with filters applied
     total = query.count()
 
     # Apply sorting
@@ -365,14 +366,12 @@ def get_receipts(
         elif sort_by == "total_discount":
             query = query.order_by(order_func(Receipt.total_discount))
         else:
-            # Default sort by date desc if invalid sort_by provided
             query = query.order_by(desc(Receipt.date))
     else:
-        # Default sort by date desc
         query = query.order_by(desc(Receipt.date))
 
-    # Apply pagination and load products
-    receipts = query.options(selectinload(Receipt.products)).offset(skip).limit(per_page).all()
+    receipts = query.options(selectinload(Receipt.products)).offset(
+        skip).limit(per_page).all()
 
     pages = (total + per_page - 1) // per_page
     has_next = page < pages
@@ -515,47 +514,44 @@ def get_filter_options(
     current_user: User = Depends(get_current_user)
 ):
     """Get available filter options for receipts"""
-    # Get unique markets
-    markets = db.query(Receipt.market).filter(Receipt.user_id == current_user.id).distinct().all()
+    markets = db.query(Receipt.market).filter(
+        Receipt.user_id == current_user.id).distinct().all()
     markets = [market[0] for market in markets if market[0]]
-    
-    # Get unique branches
-    branches = db.query(Receipt.branch).filter(Receipt.user_id == current_user.id).distinct().all()
+
+    branches = db.query(Receipt.branch).filter(
+        Receipt.user_id == current_user.id).distinct().all()
     branches = [branch[0] for branch in branches if branch[0]]
-    
-    # Get date range
+
     date_query = db.query(
         func.min(Receipt.date).label('min_date'),
         func.max(Receipt.date).label('max_date')
     ).filter(Receipt.user_id == current_user.id).first()
-    
+
     date_range = {
         "min": date_query.min_date.isoformat() if date_query.min_date else None,
         "max": date_query.max_date.isoformat() if date_query.max_date else None
     }
-    
-    # Get total range
+
     total_query = db.query(
         func.min(Receipt.total_paid).label('min_total'),
         func.max(Receipt.total_paid).label('max_total')
     ).filter(Receipt.user_id == current_user.id).first()
-    
+
     total_range = {
         "min": float(total_query.min_total) if total_query.min_total else 0.0,
         "max": float(total_query.max_total) if total_query.max_total else 0.0
     }
-    
-    # Get discount range
+
     discount_query = db.query(
         func.min(Receipt.total_discount).label('min_discount'),
         func.max(Receipt.total_discount).label('max_discount')
     ).filter(Receipt.user_id == current_user.id).first()
-    
+
     discount_range = {
         "min": float(discount_query.min_discount) if discount_query.min_discount else 0.0,
         "max": float(discount_query.max_discount) if discount_query.max_discount else 0.0
     }
-    
+
     return ReceiptFilterOptions(
         markets=sorted(markets),
         branches=sorted(branches),

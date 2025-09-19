@@ -5,19 +5,17 @@ import { useRouter } from 'next/router';
 import { formatCurrency, formatDate } from '../utils/formatting';
 import { outlookApi } from '../lib/api';
 
-// API configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
 
-// Types for the API data
 interface Receipt {
   id: number;
   market: string;
   branch: string;
   invoice?: string;
   date: string;
-  total: number;  // Total before discounts
-  total_discount?: number;  // Total discount amount
-  total_paid: number;  // Total amount paid (after discounts)
+  total: number;
+  total_discount?: number;
+  total_paid: number;
   user_id: number;
   products?: ReceiptProduct[];
 }
@@ -81,15 +79,15 @@ export default function Supermarket() {
   const { isAuthenticated, user, checkAuth } = useAuthStore();
   const router = useRouter();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [allReceipts, setAllReceipts] = useState<Receipt[]>([]); // Store all receipts for client-side operations
-  const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]); // Store filtered receipts
+  const [allReceipts, setAllReceipts] = useState<Receipt[]>([]);
+  const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
   const [paginationData, setPaginationData] = useState<PaginatedReceipts | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [spendingSummary, setSpendingSummary] = useState<SpendingSummary | null>(null);
   const [selectedReceipts, setSelectedReceipts] = useState<number[]>([]);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [showReceiptDetails, setShowReceiptDetails] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +100,6 @@ export default function Supermarket() {
     completed_steps: number;
   } | null>(null);
 
-  // Sorting and filtering state
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'date', direction: 'desc' });
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({
     market: '',
@@ -117,7 +114,6 @@ export default function Supermarket() {
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Check authentication on component mount
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -129,19 +125,17 @@ export default function Supermarket() {
     initAuth();
   }, [checkAuth]);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (!isAuthenticated && !loading) {
       router.push('/login');
       return;
     }
     if (isAuthenticated) {
-      setCurrentPage(1); // Reset to first page when data changes
+      setCurrentPage(1);
       loadData(1);
     }
-  }, [isAuthenticated, router, selectedMonth]); // Add selectedMonth dependency
+  }, [isAuthenticated, router, selectedMonth]);
 
-  // Check for Outlook connection and start sync
   useEffect(() => {
     console.log('Supermarket useEffect - outlook_connected check:', {
       isAuthenticated,
@@ -151,35 +145,28 @@ export default function Supermarket() {
 
     if (isAuthenticated && router.query.outlook_connected === 'true') {
       console.log('Outlook connected detected, starting sync...');
-      // Clear the query parameter
       router.replace('/supermarket', undefined, { shallow: true });
-      // Start Outlook sync
       syncOutlookEmails();
     }
   }, [isAuthenticated, router.query]);
 
-  // Ensure loading state is cleared after a reasonable time
   useEffect(() => {
     if (loading) {
       const timeout = setTimeout(() => {
         console.log('Loading timeout reached, clearing loading state');
         setLoading(false);
-      }, 30000); // 30 seconds timeout
+      }, 30000);
 
       return () => clearTimeout(timeout);
     }
   }, [loading]);
 
-  // Load filter options when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       loadFilterOptions();
     }
   }, [isAuthenticated]);
 
-  // Remove the auto-applying useEffect - we'll only apply filters when user clicks Apply
-
-  // Load receipts and spending summary
   const loadData = async (page: number = 1) => {
     if (!isAuthenticated) {
       setError('Please log in to view receipts');
@@ -199,8 +186,6 @@ export default function Supermarket() {
         return;
       }
 
-      // Load ALL receipts without pagination for client-side operations
-      // We'll use a large per_page value to get all receipts
       const receiptsResponse = await fetch(`${API_BASE_URL}/receipts/?page=1&per_page=10000`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -218,18 +203,15 @@ export default function Supermarket() {
       }
 
       const receiptsData: PaginatedReceipts = await receiptsResponse.json();
-      setAllReceipts(receiptsData.items); // Store all receipts
+      setAllReceipts(receiptsData.items);
       
-      // Apply initial client-side sorting and filtering
       const processedReceipts = applySortingAndFiltering(receiptsData.items);
       setFilteredReceipts(processedReceipts);
       
-      // Apply pagination for display
       const startIndex = (page - 1) * 25;
       const endIndex = startIndex + 25;
       setReceipts(processedReceipts.slice(startIndex, endIndex));
       
-      // Update pagination data
       const totalFiltered = processedReceipts.length;
       const totalPages = Math.ceil(totalFiltered / 25);
       setPaginationData({
@@ -243,7 +225,6 @@ export default function Supermarket() {
       });
       setCurrentPage(page);
 
-      // Load spending summary for selected month
       const [year, month] = selectedMonth.split('-');
       console.log(`Loading summary for ${year}-${month}`);
       
@@ -273,7 +254,6 @@ export default function Supermarket() {
     }
   };
 
-  // Load filter options
   const loadFilterOptions = async () => {
     try {
       const token = localStorage.getItem('access_token');
@@ -295,14 +275,11 @@ export default function Supermarket() {
     }
   };
 
-  // Client-side sorting and filtering function
   const applySortingAndFiltering = (receiptsToProcess: Receipt[], customSortConfig?: SortConfig) => {
     let processed = [...receiptsToProcess];
 
-    // Use custom sort config if provided, otherwise use current state
     const activeSortConfig = customSortConfig || sortConfig;
 
-    // Apply filters
     if (filterConfig.market) {
       processed = processed.filter(receipt => 
         receipt.market.toLowerCase().includes(filterConfig.market.toLowerCase())
@@ -353,7 +330,6 @@ export default function Supermarket() {
       });
     }
 
-    // Apply sorting
     if (activeSortConfig.field) {
       processed.sort((a, b) => {
         let aValue: any, bValue: any;
@@ -376,7 +352,6 @@ export default function Supermarket() {
             bValue = b.total_paid;
             break;
           case 'total_discount':
-            // Use the same calculation as calculateTotalDiscount function
             aValue = a.products ? a.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
             bValue = b.products ? b.products.reduce((total, product) => total + (product.discount || 0) + (product.discount2 || 0), 0) : 0;
             break;
@@ -393,7 +368,6 @@ export default function Supermarket() {
     return processed;
   };
 
-  // Handle sorting - now client-side only
   const handleSort = (field: SortConfig['field']) => {
     if (!field) return;
     
@@ -401,17 +375,14 @@ export default function Supermarket() {
     const newSortConfig = { field, direction: newDirection };
     setSortConfig(newSortConfig);
     
-    // Apply sorting and filtering immediately with the new sort config
     const processedReceipts = applySortingAndFiltering(allReceipts, newSortConfig);
     setFilteredReceipts(processedReceipts);
     
-    // Reset to first page and apply pagination
     const startIndex = 0;
     const endIndex = 25;
     setReceipts(processedReceipts.slice(startIndex, endIndex));
     setCurrentPage(1);
     
-    // Update pagination data
     const totalFiltered = processedReceipts.length;
     const totalPages = Math.ceil(totalFiltered / 25);
     setPaginationData({
@@ -425,7 +396,6 @@ export default function Supermarket() {
     });
   };
 
-  // Handle filter changes
   const handleFilterChange = (filterField: keyof FilterConfig, value: string) => {
     setFilterConfig(prev => ({
       ...prev,
@@ -433,7 +403,6 @@ export default function Supermarket() {
     }));
   };
 
-  // Clear all filters
   const clearFilters = () => {
     setFilterConfig({
       market: '',
@@ -447,18 +416,15 @@ export default function Supermarket() {
     });
   };
 
-  // Apply filters (now client-side only)
   const applyFilters = () => {
     const processedReceipts = applySortingAndFiltering(allReceipts);
     setFilteredReceipts(processedReceipts);
     
-    // Reset to first page and apply pagination
     const startIndex = 0;
     const endIndex = 25;
     setReceipts(processedReceipts.slice(startIndex, endIndex));
     setCurrentPage(1);
     
-    // Update pagination data
     const totalFiltered = processedReceipts.length;
     const totalPages = Math.ceil(totalFiltered / 25);
     setPaginationData({
@@ -472,7 +438,6 @@ export default function Supermarket() {
     });
   };
 
-  // Sync Outlook emails and process receipts
   const syncOutlookEmails = async () => {
     try {
       setIsImporting(true);
@@ -481,21 +446,17 @@ export default function Supermarket() {
 
       console.log('Starting Outlook sync...');
 
-      // Start the sync process (no await - let it run in background)
       const syncPromise = outlookApi.sync();
       
-      // Poll for progress updates
       const progressInterval = setInterval(async () => {
         try {
           const progressResponse = await outlookApi.getSyncProgress();
           const progress = progressResponse.data;
           setSyncProgress(progress);
           
-          // Stop polling when sync is completed or errored
           if (progress.status === 'completed' || progress.status === 'error') {
             clearInterval(progressInterval);
             if (progress.status === 'completed') {
-              // Reload data after successful sync
               await loadData(currentPage);
               setError(null);
             } else {
@@ -507,9 +468,8 @@ export default function Supermarket() {
         } catch (progressError) {
           console.error('Error getting sync progress:', progressError);
         }
-      }, 1000); // Poll every second
+      }, 1000);
 
-      // Handle the main sync promise
       try {
         const response = await syncPromise;
         console.log('Outlook sync response:', response.data);
@@ -522,7 +482,6 @@ export default function Supermarket() {
         setSyncProgress(null);
       }
 
-      // Cleanup timeout
       setTimeout(() => {
         clearInterval(progressInterval);
         if (isImporting) {
@@ -530,7 +489,7 @@ export default function Supermarket() {
           setIsImporting(false);
           setSyncProgress(null);
         }
-      }, 120000); // 2 minutes timeout
+      }, 120000);
 
     } catch (err) {
       console.error('Error starting Outlook sync:', err);
@@ -541,7 +500,6 @@ export default function Supermarket() {
     }
   };
 
-  // Handle file upload
   const handleFileUpload = async (files: FileList) => {
     if (!isAuthenticated) {
       setError('Please log in to upload receipts');
@@ -565,8 +523,7 @@ export default function Supermarket() {
       
       setUploadProgress([`Starting upload of ${totalFiles} file(s)...`]);
 
-      // Process files in batches to avoid overwhelming the server
-      const batchSize = Math.min(10, totalFiles); // Max 10 files per batch
+      const batchSize = Math.min(10, totalFiles);
       const batches = [];
       
       for (let i = 0; i < filesArray.length; i += batchSize) {
@@ -586,11 +543,10 @@ export default function Supermarket() {
           formData.append('files', file);
         });
 
-        // Create AbortController for timeout handling
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
           controller.abort();
-        }, 180000); // 3 minutes per batch
+        }, 180000);
 
         try {
           const response = await fetch(`${API_BASE_URL}/receipts/upload`, {
@@ -631,12 +587,10 @@ export default function Supermarket() {
         }
       }
 
-      // Final summary
       setUploadProgress(prev => [...prev, 
         `\n📊 Final Results: ${successCount} successful, ${failureCount} failed out of ${totalFiles} total`
       ]);
 
-      // Show individual results for failed files
       const failedResults = allResults.filter((r: any) => !r.success);
       if (failedResults.length > 0) {
         setUploadProgress(prev => [...prev, '\n❌ Failed files:']);
@@ -645,7 +599,6 @@ export default function Supermarket() {
         });
       }
 
-      // Reload data after successful upload
       if (successCount > 0) {
         await loadData(currentPage);
       }
@@ -663,7 +616,6 @@ export default function Supermarket() {
     }
   };
 
-  // Handle receipt selection
   const toggleReceiptSelection = (receiptId: number) => {
     setSelectedReceipts(prev =>
       prev.includes(receiptId)
@@ -680,7 +632,6 @@ export default function Supermarket() {
     setSelectedReceipts([]);
   };
 
-  // Delete receipts
   const deleteSelectedReceipts = async () => {
     if (!selectedReceipts.length) return;
 
@@ -697,7 +648,6 @@ export default function Supermarket() {
       let successCount = 0;
       let detailedErrors: string[] = [];
 
-      // Delete each selected receipt
       for (const receiptId of selectedReceipts) {
         try {
           const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}`, {
@@ -746,7 +696,6 @@ export default function Supermarket() {
     }
   };
 
-  // View receipt details
   const viewReceiptDetails = async (receiptId: number) => {
     try {
       const token = localStorage.getItem('access_token');
@@ -774,7 +723,6 @@ export default function Supermarket() {
     }
   };
 
-  // Calculate total discount for a receipt
   const calculateTotalDiscount = (receipt: Receipt): number => {
     if (!receipt.products || receipt.products.length === 0) return 0;
     return receipt.products.reduce((total, product) => {
@@ -782,7 +730,6 @@ export default function Supermarket() {
     }, 0);
   };
 
-  // Export receipts to CSV
   const exportToCSV = async () => {
     try {
       const token = localStorage.getItem('access_token');
@@ -801,7 +748,6 @@ export default function Supermarket() {
         throw new Error('Failed to export receipts');
       }
 
-      // Get the blob and create a download
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -817,18 +763,15 @@ export default function Supermarket() {
     }
   };
 
-  // Pagination functions
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= (paginationData?.pages || 1)) {
-      setSelectedReceipts([]); // Clear selection when changing pages
+      setSelectedReceipts([]);
       
-      // Client-side pagination
       const startIndex = (page - 1) * 25;
       const endIndex = startIndex + 25;
       setReceipts(filteredReceipts.slice(startIndex, endIndex));
       setCurrentPage(page);
       
-      // Update pagination data
       setPaginationData(prev => prev ? {
         ...prev,
         page: page,
@@ -846,7 +789,6 @@ export default function Supermarket() {
     const currentPage = paginationData.page;
     const totalPages = paginationData.pages;
 
-    // Always show first page
     if (currentPage > 3) {
       pages.push(1);
       if (currentPage > 4) {
@@ -854,12 +796,10 @@ export default function Supermarket() {
       }
     }
 
-    // Show pages around current page
     for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
       pages.push(i);
     }
 
-    // Always show last page
     if (currentPage < totalPages - 2) {
       if (currentPage < totalPages - 3) {
         pages.push('...');
@@ -1101,7 +1041,7 @@ export default function Supermarket() {
             {uploadProgress.length > 0 && (
               <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
                 {uploadProgress.map((message, index) => {
-                  let bgColor = 'bg-blue-50 text-blue-700'; // default
+                  let bgColor = 'bg-blue-50 text-blue-700';
                   
                   if (message.includes('successfully') || message.includes('success') || message.includes('✅')) {
                     bgColor = 'bg-green-50 text-green-700';
