@@ -34,6 +34,9 @@ jobs:
           python -m pytest test_normalize_totals_standalone.py -v
 
       - name: Run syntax and import checks
+        env:
+          JWT_SECRET: "test-secret-for-import-only"
+          DATABASE_URL: "postgresql://test:test@localhost:5432/test"
         run: |
           echo 'Checking Python syntax and imports...'
           python -m py_compile backend/app/main.py
