@@ -30,7 +30,7 @@ jobs:
           echo 'Running offline unit tests that require no external dependencies...'
           cd tests
           python -m pytest test_receipt_fields.py -v
-          python -m pytest test_receipt_processing.py -v  
+          python -m pytest test_receipt_processing.py -v
           python -m pytest test_normalize_totals_standalone.py -v
 
       - name: Run syntax and import checks
