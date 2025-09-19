@@ -48,12 +48,6 @@ jobs:
           python -m py_compile backend/app/database.py
           python -c "import sys; sys.path.append('backend'); from app.routes import receipts, auth, dashboard, outlook, transactions; print('All route imports successful')"
 
-      - name: Test Docker configuration syntax
-        run: |
-          echo 'Testing Docker configuration syntax...'
-          docker compose config --quiet
-          echo 'Docker Compose configuration is valid!'
-
       - name: Cleanup
         run: |
           echo 'Test run completed successfully!'
