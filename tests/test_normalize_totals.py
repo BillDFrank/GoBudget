@@ -1,9 +1,10 @@
-from app.routes.receipts import _normalize_totals
 import sys
 import os
 
 # Add backend to path like other tests do
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'backend'))
+
+from app.routes.receipts import _normalize_totals
 
 
 def test_normalize_when_total_is_none_uses_products_sum():

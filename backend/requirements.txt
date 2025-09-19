@@ -13,3 +13,5 @@ httpx
 msal
 azure-identity
 msgraph-sdk
+requests
+pytest

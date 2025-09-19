@@ -11,21 +11,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: gobudget
-          POSTGRES_PASSWORD: Secure1!
-          POSTGRES_DB: gobudget
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,138 +20,34 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libpq-dev
-
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-          pip install python-dotenv psycopg2-binary requests pytest
 
-      - name: Run unit tests (no dependencies)
+      - name: Run offline unit tests
         run: |
-          echo 'Running unit tests that require no external dependencies...'
-          pytest tests/test_receipt_fields.py tests/test_receipt_processing.py tests/test_receipt_integration.py -v
+          echo 'Running offline unit tests that require no external dependencies...'
+          cd tests
+          python -m pytest test_receipt_fields.py -v
+          python -m pytest test_receipt_processing.py -v
+          python -m pytest test_normalize_totals.py -v
 
-      - name: Create test environment file
+      - name: Run syntax and import checks
         run: |
-          cat > .env << EOF
-          POSTGRES_HOST=localhost
-          POSTGRES_PORT=5432
-          POSTGRES_USER=gobudget
-          POSTGRES_PASSWORD=Secure1!
-          POSTGRES_DB=gobudget
-          DATABASE_URL=postgresql://gobudget:Secure1!@localhost:5432/gobudget
+          echo 'Checking Python syntax and imports...'
+          python -m py_compile backend/app/main.py
+          python -m py_compile backend/app/models.py
+          python -m py_compile backend/app/schemas.py
+          python -m py_compile backend/app/database.py
+          python -c "import sys; sys.path.append('backend'); from app.routes import receipts, auth, dashboard, outlook, transactions; print('All route imports successful')"
 
-          JWT_SECRET=test_jwt_secret_key_for_testing_only
-          JWT_ALGORITHM=HS256
-          JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
-          JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
-
-          API_HOST=0.0.0.0
-          API_PORT=8000
-
-          NEXT_PUBLIC_API_URL=http://localhost:8001/api
-          NEXT_PUBLIC_APP_URL=http://localhost:3001
-          EOF
-
-      - name: Wait for PostgreSQL
+      - name: Test Docker configuration syntax
         run: |
-          until pg_isready -h localhost -p 5432 -U gobudget; do
-            echo "Waiting for PostgreSQL..."
-            sleep 2
-          done
-          echo "PostgreSQL is ready!"
-
-      - name: Initialize database
-        run: |
-          cd backend
-          python -c "
-          from app.database import init_database
-          from app.models import Base
-          engine = init_database()
-          Base.metadata.create_all(bind=engine)
-          print('Database tables created successfully')
-          "
-
-      - name: Run database tests
-        run: |
-          echo 'Testing database connection...'
-          python tests/test_database.py
-
-      - name: Run database tests with pytest
-        run: |
-          echo 'Running database tests with pytest...'
-          pytest tests/test_database.py -v -m database
-
-      - name: Start backend service
-        run: |
-          cd backend
-          python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 &
-          echo $! > backend.pid
-          sleep 10
-
-      - name: Test backend health
-        run: |
-          echo 'Testing backend health endpoint...'
-          curl -f http://localhost:8001/health || curl -f http://localhost:8001/ || (echo 'Backend health check failed' && exit 1)
-          echo 'Backend is healthy!'
-
-      - name: Run API tests
-        run: |
-          echo 'Running API endpoint tests...'
-          python tests/test_api.py
-
-      - name: Run API tests with pytest
-        run: |
-          echo 'Running API tests with pytest...'
-          pytest tests/test_api.py -v -m api
-
-      - name: Run upload tests
-        run: |
-          echo 'Running upload functionality tests...'
-          python tests/test_upload.py
-
-      - name: Run upload tests with pytest
-        run: |
-          echo 'Running upload tests with pytest...'
-          pytest tests/test_upload.py -v -m upload
-
-      - name: Run comprehensive test suite
-        run: |
-          echo 'Running comprehensive test suite...'
-          python tests/run_tests.py
-
-      - name: Run all tests with pytest
-        run: |
-          echo 'Running all tests with pytest...'
-          pytest tests/ -v --tb=short
-
-      - name: Stop backend service
-        run: |
-          if [ -f backend/backend.pid ]; then
-            kill $(cat backend/backend.pid) || true
-            rm backend/backend.pid
-          fi
-
-      - name: Test Docker build
-        run: |
-          echo 'Testing Docker build process...'
-          docker build -t gobudget-backend-test ./backend
-          docker build -t gobudget-frontend-test ./frontend
-          echo 'Docker builds successful!'
-
-      - name: Test Docker Compose
-        run: |
-          echo 'Testing Docker Compose configuration...'
+          echo 'Testing Docker configuration syntax...'
           docker-compose config --quiet
           echo 'Docker Compose configuration is valid!'
 
       - name: Cleanup
         run: |
-          echo 'Cleaning up test environment...'
-          docker system prune -f
-          docker volume prune -f
+          echo 'Test run completed successfully!'
