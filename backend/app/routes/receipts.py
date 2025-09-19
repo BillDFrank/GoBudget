@@ -326,7 +326,7 @@ def get_receipts(
 ):
     """Get user's receipts with pagination, sorting, and filtering"""
     page = max(1, page)
-    per_page = min(max(1, per_page), 10000)
+    per_page = min(max(1, per_page), 1000)
 
     skip = (page - 1) * per_page
 
