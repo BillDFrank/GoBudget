@@ -65,7 +65,25 @@ export const transactionApi = {
   getAll: () => api.get('/transactions/'),
   create: (data: any) => api.post('/transactions/', data),
   update: (id: number, data: any) => api.put(`/transactions/${id}`, data),
-  delete: (id: number) => api.delete(`/transactions/${id}`)
+  delete: (id: number) => api.delete(`/transactions/${id}`),
+  importCsv: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/transactions/import-csv', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  previewCsv: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/transactions/preview-csv', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  }
 };
 
 // Outlook integration API functions

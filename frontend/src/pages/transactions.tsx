@@ -23,6 +23,12 @@ interface TransactionModalProps {
   initialData?: Transaction;
 }
 
+interface CsvImportModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onImportSuccess: () => void;
+}
+
 const CATEGORIES = [
   'Food & Dining',
   'Transportation', 
@@ -207,11 +213,481 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   );
 };
 
+const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImportSuccess }) => {
+  const [file, setFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<'upload' | 'confirm'>('upload');
+  const [previewTransactions, setPreviewTransactions] = useState<any[]>([]);
+  const [editingTransaction, setEditingTransaction] = useState<any | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      if (!selectedFile.name.endsWith('.csv')) {
+        setError('Please select a CSV file');
+        return;
+      }
+      setFile(selectedFile);
+      setError(null);
+      setUploadResult(null);
+      setStep('upload');
+    }
+  };
+
+  const handlePreview = async () => {
+    if (!file) {
+      setError('Please select a file');
+      return;
+    }
+
+    setIsUploading(true);
+    setError(null);
+    
+    try {
+      const response = await transactionApi.previewCsv(file);
+      const previewData = response.data;
+      
+      if (previewData.errors && previewData.errors.length > 0) {
+        setError(`Validation errors found:\n${previewData.errors.join('\n')}`);
+        setIsUploading(false);
+        return;
+      }
+      
+      // Add temporary IDs for editing
+      const transactionsWithIds = previewData.valid_transactions.map((t: any, index: number) => ({
+        ...t,
+        tempId: Date.now() + index
+      }));
+      
+      setPreviewTransactions(transactionsWithIds);
+      setStep('confirm');
+    } catch (err: any) {
+      console.error('Preview error:', err);
+      if (err.response?.data?.detail) {
+        if (typeof err.response.data.detail === 'object' && err.response.data.detail.errors) {
+          setError(`Validation failed:\n${err.response.data.detail.errors.join('\n')}`);
+        } else {
+          setError(err.response.data.detail);
+        }
+      } else {
+        setError('Failed to parse CSV file');
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!file) return;
+
+    setIsUploading(true);
+    setError(null);
+    
+    try {
+      const response = await transactionApi.importCsv(file);
+      setUploadResult(response.data);
+      onImportSuccess();
+      setStep('upload');
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      if (err.response?.data?.detail) {
+        if (typeof err.response.data.detail === 'object' && err.response.data.detail.errors) {
+          setError(`Validation failed:\n${err.response.data.detail.errors.join('\n')}`);
+        } else {
+          setError(err.response.data.detail);
+        }
+      } else {
+        setError('Failed to upload CSV file');
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleEditTransaction = (transaction: any) => {
+    setEditingTransaction({ ...transaction });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingTransaction) return;
+    
+    setPreviewTransactions(prev => 
+      prev.map(t => t.tempId === editingTransaction.tempId ? editingTransaction : t)
+    );
+    setEditingTransaction(null);
+  };
+
+  const handleRemoveTransaction = (tempId: number) => {
+    setPreviewTransactions(prev => prev.filter(t => t.tempId !== tempId));
+  };
+
+  const handleClose = () => {
+    setFile(null);
+    setError(null);
+    setUploadResult(null);
+    setStep('upload');
+    setPreviewTransactions([]);
+    setEditingTransaction(null);
+    onClose();
+  };
+
+  const downloadSampleCsv = () => {
+    const sampleData = `date,type,person,category,description,amount
+2024-01-15,Expense,Family,Food & Dining,Grocery shopping,-85.50
+2024-01-16,Income,John,Income,Salary payment,2500.00
+2024-01-17,Expense,Mary,Transportation,Gas station,-45.20
+2024-01-18,Expense,,Entertainment,Movie tickets,-24.00`;
+    
+    const blob = new Blob([sampleData], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'transactions_sample.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {step === 'upload' ? 'Import Transactions from CSV' : 'Review Transactions'}
+          </h3>
+          <button 
+            onClick={handleClose}
+            disabled={isUploading}
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            aria-label="Close modal"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-6">
+          {step === 'upload' && (
+            <div className="space-y-4">
+              {/* Instructions */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-900 mb-2">CSV Format Requirements:</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• <strong>date</strong>: Date in YYYY-MM-DD format (required)</li>
+                  <li>• <strong>type</strong>: Income, Expense, or Transfer (required)</li>
+                  <li>• <strong>person</strong>: Person/entity name (optional, defaults to "Family")</li>
+                  <li>• <strong>category</strong>: Transaction category (required)</li>
+                  <li>• <strong>description</strong>: Transaction description (required)</li>
+                  <li>• <strong>amount</strong>: Transaction amount - positive for income, negative for expenses (required)</li>
+                </ul>
+                <p className="text-sm text-blue-700 mt-2">
+                  <strong>Valid categories:</strong> Food & Dining, Transportation, Shopping, Entertainment, Bills & Utilities, Income, Healthcare, Education, Other
+                </p>
+              </div>
+
+              {/* Sample CSV download */}
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Need a template?</span>
+                <button
+                  onClick={downloadSampleCsv}
+                  className="text-blue-600 hover:text-blue-800 text-sm underline"
+                >
+                  Download Sample CSV
+                </button>
+              </div>
+
+              {/* File upload */}
+              <div>
+                <label htmlFor="csv-file" className="block text-sm font-medium text-gray-700 mb-2">
+                  Select CSV File
+                </label>
+                <input
+                  id="csv-file"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  disabled={isUploading}
+                />
+                {file && (
+                  <p className="text-sm text-gray-600 mt-1">Selected: {file.name}</p>
+                )}
+              </div>
+
+              {/* Error display */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-800 whitespace-pre-line">{error}</p>
+                </div>
+              )}
+
+              {/* Success display */}
+              {uploadResult && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-medium text-green-900 mb-2">Import Successful!</h4>
+                  <p className="text-green-800">{uploadResult.message}</p>
+                  {uploadResult.sample_data && uploadResult.sample_data.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-sm font-medium text-green-800">Sample imported transactions:</p>
+                      <div className="mt-2 space-y-1">
+                        {uploadResult.sample_data.map((transaction: any, index: number) => (
+                          <div key={index} className="text-sm text-green-700 bg-green-100 p-2 rounded">
+                            {transaction.date} - {transaction.type} - {transaction.description}: ${Math.abs(transaction.amount).toFixed(2)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  disabled={isUploading}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  {uploadResult ? 'Close' : 'Cancel'}
+                </button>
+                {!uploadResult && (
+                  <button
+                    onClick={handlePreview}
+                    disabled={!file || isUploading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUploading ? 'Processing...' : 'Preview Transactions'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {step === 'confirm' && (
+            <div className="space-y-6">
+              {/* Summary */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h4 className="font-medium text-green-900 mb-2">
+                  Review {previewTransactions.length} Transaction{previewTransactions.length !== 1 ? 's' : ''}
+                </h4>
+                <p className="text-green-800 text-sm">
+                  Please review the transactions below. You can edit or remove any transaction before importing.
+                </p>
+              </div>
+
+              {/* Transactions Table */}
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full text-sm text-left text-gray-500">
+                  <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-4 py-3">Date</th>
+                      <th scope="col" className="px-4 py-3">Type</th>
+                      <th scope="col" className="px-4 py-3">Person</th>
+                      <th scope="col" className="px-4 py-3">Category</th>
+                      <th scope="col" className="px-4 py-3">Description</th>
+                      <th scope="col" className="px-4 py-3">Amount</th>
+                      <th scope="col" className="px-4 py-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewTransactions.map((transaction) => (
+                      <tr key={transaction.tempId} className="bg-white border-b hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {transaction.date}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="capitalize">{transaction.type}</span>
+                        </td>
+                        <td className="px-4 py-3">{transaction.person}</td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs font-medium px-2.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                            {transaction.category}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 max-w-xs truncate" title={transaction.description}>
+                          {transaction.description}
+                        </td>
+                        <td className={`px-4 py-3 font-medium ${parseFloat(transaction.amount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {parseFloat(transaction.amount) >= 0 ? '+' : ''}${Math.abs(parseFloat(transaction.amount)).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex space-x-2">
+                            <button 
+                              onClick={() => handleEditTransaction(transaction)}
+                              className="text-blue-600 hover:text-blue-900 transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button 
+                              onClick={() => handleRemoveTransaction(transaction.tempId)}
+                              className="text-red-600 hover:text-red-900 transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {previewTransactions.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">No transactions to import. Please go back and select a different file.</p>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex justify-between pt-4">
+                <button
+                  onClick={() => setStep('upload')}
+                  disabled={isUploading}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Back to Upload
+                </button>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleClose}
+                    disabled={isUploading}
+                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmImport}
+                    disabled={previewTransactions.length === 0 || isUploading}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUploading ? 'Importing...' : `Import ${previewTransactions.length} Transaction${previewTransactions.length !== 1 ? 's' : ''}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Edit Transaction Modal */}
+        {editingTransaction && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-60">
+            <div className="bg-white rounded-lg max-w-md w-full">
+              <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                <h4 className="text-lg font-semibold text-gray-900">Edit Transaction</h4>
+                <button
+                  onClick={() => setEditingTransaction(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={editingTransaction.date}
+                    onChange={(e) => setEditingTransaction({...editingTransaction, date: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    value={editingTransaction.type}
+                    onChange={(e) => setEditingTransaction({...editingTransaction, type: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="Income">Income</option>
+                    <option value="Expense">Expense</option>
+                    <option value="Transfer">Transfer</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Person</label>
+                  <input
+                    type="text"
+                    value={editingTransaction.person}
+                    onChange={(e) => setEditingTransaction({...editingTransaction, person: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <select
+                    value={editingTransaction.category}
+                    onChange={(e) => setEditingTransaction({...editingTransaction, category: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  >
+                    {CATEGORIES.map(category => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <input
+                    type="text"
+                    value={editingTransaction.description}
+                    onChange={(e) => setEditingTransaction({...editingTransaction, description: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingTransaction.amount}
+                    onChange={(e) => setEditingTransaction({...editingTransaction, amount: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    onClick={() => setEditingTransaction(null)}
+                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function Transactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCsvImportModal, setShowCsvImportModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -232,11 +708,9 @@ export default function Transactions() {
     }
   }, []);
 
-  // Real-time updates with polling (30 seconds interval)
+  // Load transactions on mount and when authentication changes
   useEffect(() => {
     fetchTransactions();
-    const interval = setInterval(fetchTransactions, 30000);
-    return () => clearInterval(interval);
   }, [fetchTransactions]);
 
   // Optimized transaction operations
@@ -281,6 +755,12 @@ export default function Transactions() {
     }
   }, []);
 
+  const handleCsvImportSuccess = useCallback(() => {
+    // Refresh transactions after successful CSV import
+    fetchTransactions();
+    setShowCsvImportModal(false);
+  }, [fetchTransactions]);
+
   // Memoized filtered transactions for better performance
   const filteredTransactions = useMemo(() => {
     return transactions.filter(transaction => {
@@ -319,13 +799,22 @@ export default function Transactions() {
         <div className="card">
           <div className="card-header">
             <h2 className="card-title">All Transactions</h2>
-            <button 
-              onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-              aria-label="Add new transaction"
-            >
-              Add Transaction
-            </button>
+            <div className="flex space-x-3">
+              <button 
+                onClick={() => setShowCsvImportModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                aria-label="Import transactions from CSV"
+              >
+                Import CSV
+              </button>
+              <button 
+                onClick={() => setShowCreateModal(true)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                aria-label="Add new transaction"
+              >
+                Add Transaction
+              </button>
+            </div>
           </div>
 
           <div className="card-content">
@@ -453,6 +942,14 @@ export default function Transactions() {
             onClose={() => setShowCreateModal(false)}
             onSubmit={handleCreateTransaction}
             title="Create New Transaction"
+          />
+        )}
+
+        {showCsvImportModal && (
+          <CsvImportModal
+            isOpen={showCsvImportModal}
+            onClose={() => setShowCsvImportModal(false)}
+            onImportSuccess={handleCsvImportSuccess}
           />
         )}
 
