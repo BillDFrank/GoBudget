@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
+from sqlalchemy import desc, asc
 from ..database import get_db
 from ..models import Transaction as TransactionModel, User
 from ..schemas import TransactionCreate, Transaction as TransactionSchema
@@ -7,15 +8,91 @@ from .auth import get_current_user
 import pandas as pd
 import io
 from datetime import datetime
-from typing import List
+from typing import Optional
 
 router = APIRouter()
 
 
 @router.get("/", response_model=list[TransactionSchema])
-def get_transactions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    transactions = db.query(TransactionModel).filter(
-        TransactionModel.user_id == current_user.id).all()
+def get_transactions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    # Filter parameters
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    type: Optional[str] = None,
+    category: Optional[str] = None,
+    person: Optional[str] = None,
+    description: Optional[str] = None,
+    amount_min: Optional[float] = None,
+    amount_max: Optional[float] = None,
+    # Sort parameters
+    sort_by: Optional[str] = 'date',
+    sort_direction: Optional[str] = 'desc'
+):
+    """
+    Get transactions with optional filtering and sorting.
+
+    Filter parameters:
+    - date_from: Filter transactions from this date (YYYY-MM-DD)
+    - date_to: Filter transactions up to this date (YYYY-MM-DD)
+    - type: Filter by transaction type
+    - category: Filter by category
+    - person: Filter by person/entity
+    - description: Filter by description (partial match)
+    - amount_min: Filter by minimum amount
+    - amount_max: Filter by maximum amount
+
+    Sort parameters:
+    - sort_by: Field to sort by (date, amount, type, category, person, description)
+    - sort_direction: Sort direction (asc, desc)
+    """
+    query = db.query(TransactionModel).filter(
+        TransactionModel.user_id == current_user.id
+    )
+
+    # Apply filters
+    if date_from:
+        try:
+            date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+            query = query.filter(TransactionModel.date >= date_from_obj)
+        except ValueError:
+            pass  # Invalid date format, ignore filter
+
+    if date_to:
+        try:
+            date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+            query = query.filter(TransactionModel.date <= date_to_obj)
+        except ValueError:
+            pass  # Invalid date format, ignore filter
+
+    if type:
+        query = query.filter(TransactionModel.type == type)
+
+    if category:
+        query = query.filter(TransactionModel.category == category)
+
+    if person:
+        query = query.filter(TransactionModel.person == person)
+
+    if description:
+        query = query.filter(
+            TransactionModel.description.ilike(f'%{description}%'))
+
+    if amount_min is not None:
+        query = query.filter(TransactionModel.amount >= amount_min)
+
+    if amount_max is not None:
+        query = query.filter(TransactionModel.amount <= amount_max)
+
+    # Apply sorting
+    sort_field = getattr(TransactionModel, sort_by, TransactionModel.date)
+    if sort_direction == 'desc':
+        query = query.order_by(desc(sort_field))
+    else:
+        query = query.order_by(asc(sort_field))
+
+    transactions = query.all()
     return transactions
 
 

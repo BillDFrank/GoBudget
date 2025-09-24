@@ -62,7 +62,7 @@ export default api;
 
 // Transaction API functions
 export const transactionApi = {
-  getAll: () => api.get('/transactions/'),
+  getAll: (queryParams?: string) => api.get(`/transactions/${queryParams ? `?${queryParams}` : ''}`),
   create: (data: any) => api.post('/transactions/', data),
   update: (id: number, data: any) => api.put(`/transactions/${id}`, data),
   delete: (id: number) => api.delete(`/transactions/${id}`),

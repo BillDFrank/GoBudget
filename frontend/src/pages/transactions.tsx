@@ -1,6 +1,21 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { FilterPanel, SortableHeader, type FilterDef, type SortConfig } from '../components/Filters';
 import AdminLayout from '../layout/AdminLayout';
 import { transactionApi } from '../lib/api';
+// Transaction types and categories
+const DEFAULT_TRANSACTION_TYPES = ['Expense', 'Income'];
+
+const DEFAULT_CATEGORIES = [
+  'Food & Dining',
+  'Transportation', 
+  'Shopping',
+  'Entertainment',
+  'Bills & Utilities',
+  'Income',
+  'Healthcare',
+  'Education',
+  'Other'
+];
 
 interface Transaction {
   id: number;
@@ -15,6 +30,16 @@ interface Transaction {
 
 interface TransactionFormData extends Omit<Transaction, 'id' | 'user_id'> {}
 
+interface PaginatedTransactions {
+  items: Transaction[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -28,20 +53,6 @@ interface CsvImportModalProps {
   onClose: () => void;
   onImportSuccess: () => void;
 }
-
-const CATEGORIES = [
-  'Food & Dining',
-  'Transportation', 
-  'Shopping',
-  'Entertainment',
-  'Bills & Utilities',
-  'Income',
-  'Healthcare',
-  'Education',
-  'Other'
-] as const;
-
-const TRANSACTION_TYPES = ['Income', 'Expense', 'Transfer'] as const;
 
 const TransactionModal: React.FC<TransactionModalProps> = ({ 
   isOpen, 
@@ -120,7 +131,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               required
             >
               <option value="">Select Type</option>
-              {TRANSACTION_TYPES.map(type => (
+              {DEFAULT_TRANSACTION_TYPES.map(type => (
                 <option key={type} value={type}>{type}</option>
               ))}
             </select>
@@ -153,7 +164,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               required
             >
               <option value="">Select Category</option>
-              {CATEGORIES.map(category => (
+              {DEFAULT_CATEGORIES.map(category => (
                 <option key={category} value={category}>{category}</option>
               ))}
             </select>
@@ -632,7 +643,7 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
                     onChange={(e) => setEditingTransaction({...editingTransaction, category: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   >
-                    {CATEGORIES.map(category => (
+                    {DEFAULT_CATEGORIES.map(category => (
                       <option key={category} value={category}>{category}</option>
                     ))}
                   </select>
@@ -682,23 +693,92 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
   );
 };
 
+const getCategoryBadgeColor = (category: string) => {
+  const colorMap: Record<string, string> = {
+    'Income': 'bg-green-100 text-green-800',
+    'Food & Dining': 'bg-orange-100 text-orange-800',
+    'Transportation': 'bg-blue-100 text-blue-800',
+    'Shopping': 'bg-purple-100 text-purple-800',
+    'Entertainment': 'bg-pink-100 text-pink-800',
+    'Bills & Utilities': 'bg-red-100 text-red-800',
+    'Healthcare': 'bg-teal-100 text-teal-800',
+    'Education': 'bg-indigo-100 text-indigo-800',
+    'Other': 'bg-gray-100 text-gray-800',
+  };
+  return colorMap[category] || 'bg-gray-100 text-gray-800';
+};
+
 export default function Transactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCsvImportModal, setShowCsvImportModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'date', direction: 'desc' });
+  const [filterConfig, setFilterConfig] = useState<Record<string, string>>({
+    dateFrom: '',
+    dateTo: '',
+    type: '',
+    category: '',
+    person: '',
+    description: '',
+    amountMin: '',
+    amountMax: '',
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [paginationData, setPaginationData] = useState<PaginatedTransactions | null>(null);
+  const pageSize = 25;
 
-  // Optimized fetch function with error handling
+  // Dynamic options based on actual data
+  const dynamicOptions = useMemo(() => {
+    const types = Array.from(new Set(allTransactions.map(t => t.type))).filter(Boolean);
+    const categories = Array.from(new Set(allTransactions.map(t => t.category))).filter(Boolean);
+    const persons = Array.from(new Set(allTransactions.map(t => t.person))).filter(Boolean);
+
+    return {
+      types,
+      categories,
+      persons,
+    };
+  }, [allTransactions]);
+
+  const transactionFilterDefs = useMemo<FilterDef[]>(() => [
+    { key: 'type', label: 'Type', type: 'select', options: dynamicOptions.types },
+    { key: 'category', label: 'Category', type: 'select', options: dynamicOptions.categories },
+    { key: 'person', label: 'Person', type: 'select', options: dynamicOptions.persons },
+    { key: 'description', label: 'Description', type: 'text', placeholder: 'Search description' },
+    { key: 'dateFrom', label: 'Date From', type: 'date' },
+    { key: 'dateTo', label: 'Date To', type: 'date' },
+    { key: 'amountMin', label: 'Min Amount', type: 'number', placeholder: '0.00' },
+    { key: 'amountMax', label: 'Max Amount', type: 'number', placeholder: '9999.99' },
+  ], [dynamicOptions]);
+
   const fetchTransactions = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const response = await transactionApi.getAll();
-      setTransactions(response.data);
+      setAllTransactions(response.data);
+      setFilteredTransactions(response.data);
+      
+      // Update pagination
+      const totalPages = Math.ceil(response.data.length / pageSize);
+      const paginatedData = response.data.slice(0, pageSize);
+      setTransactions(paginatedData);
+      setCurrentPage(1);
+      setPaginationData({
+        items: paginatedData,
+        total: response.data.length,
+        page: 1,
+        per_page: pageSize,
+        pages: totalPages,
+        has_next: 1 < totalPages,
+        has_prev: false,
+      });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch transactions';
       setError(errorMessage);
@@ -706,85 +786,294 @@ export default function Transactions() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pageSize]);
 
-  // Load transactions on mount and when authentication changes
   useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  // Optimized transaction operations
+  const handleFilterChange = useCallback((key: string, value: string) => {
+    setFilterConfig(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  const clearFilters = useCallback(async () => {
+    const clearedFilters = {
+      dateFrom: '',
+      dateTo: '',
+      type: '',
+      category: '',
+      person: '',
+      description: '',
+      amountMin: '',
+      amountMax: '',
+    };
+    setFilterConfig(clearedFilters);
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Get all data without filters, only with current sort
+      const queryParams = new URLSearchParams();
+      if (sortConfig.field) {
+        queryParams.append('sort_by', sortConfig.field);
+        queryParams.append('sort_direction', sortConfig.direction);
+      }
+      
+      const response = await transactionApi.getAll(queryParams.toString());
+      setAllTransactions(response.data);
+      setFilteredTransactions(response.data);
+      
+      // Update pagination
+      const totalPages = Math.ceil(response.data.length / pageSize);
+      setCurrentPage(1);
+      const paginatedData = response.data.slice(0, pageSize);
+      setTransactions(paginatedData);
+      setPaginationData({
+        items: paginatedData,
+        total: response.data.length,
+        page: 1,
+        per_page: pageSize,
+        pages: totalPages,
+        has_next: 1 < totalPages,
+        has_prev: false,
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to clear filters';
+      setError(errorMessage);
+      console.error('Error clearing filters:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [sortConfig, pageSize]);
+
+  const applyFilters = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Build query parameters from filter config
+      const queryParams = new URLSearchParams();
+      
+      if (filterConfig.dateFrom) queryParams.append('date_from', filterConfig.dateFrom);
+      if (filterConfig.dateTo) queryParams.append('date_to', filterConfig.dateTo);
+      if (filterConfig.type) queryParams.append('type', filterConfig.type);
+      if (filterConfig.category) queryParams.append('category', filterConfig.category);
+      if (filterConfig.person) queryParams.append('person', filterConfig.person);
+      if (filterConfig.description) queryParams.append('description', filterConfig.description);
+      if (filterConfig.amountMin) queryParams.append('amount_min', filterConfig.amountMin);
+      if (filterConfig.amountMax) queryParams.append('amount_max', filterConfig.amountMax);
+      
+      // Add sorting parameters
+      if (sortConfig.field) {
+        queryParams.append('sort_by', sortConfig.field);
+        queryParams.append('sort_direction', sortConfig.direction);
+      }
+      
+      const response = await transactionApi.getAll(queryParams.toString());
+      setAllTransactions(response.data);
+      setFilteredTransactions(response.data);
+      
+      // Update pagination
+      const totalPages = Math.ceil(response.data.length / pageSize);
+      setCurrentPage(1);
+      const paginatedData = response.data.slice(0, pageSize);
+      setTransactions(paginatedData);
+      setPaginationData({
+        items: paginatedData,
+        total: response.data.length,
+        page: 1,
+        per_page: pageSize,
+        pages: totalPages,
+        has_next: 1 < totalPages,
+        has_prev: false,
+      });
+      
+      setShowFilters(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to apply filters';
+      setError(errorMessage);
+      console.error('Error applying filters:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [filterConfig, sortConfig, pageSize]);
+
+  const handleSort = useCallback(async (field: string) => {
+    const newDirection: 'asc' | 'desc' = sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc';
+    const newSortConfig = { field, direction: newDirection };
+    setSortConfig(newSortConfig);
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Build query parameters with current filters and new sort
+      const queryParams = new URLSearchParams();
+      
+      if (filterConfig.dateFrom) queryParams.append('date_from', filterConfig.dateFrom);
+      if (filterConfig.dateTo) queryParams.append('date_to', filterConfig.dateTo);
+      if (filterConfig.type) queryParams.append('type', filterConfig.type);
+      if (filterConfig.category) queryParams.append('category', filterConfig.category);
+      if (filterConfig.person) queryParams.append('person', filterConfig.person);
+      if (filterConfig.description) queryParams.append('description', filterConfig.description);
+      if (filterConfig.amountMin) queryParams.append('amount_min', filterConfig.amountMin);
+      if (filterConfig.amountMax) queryParams.append('amount_max', filterConfig.amountMax);
+      
+      // Add new sorting parameters
+      queryParams.append('sort_by', field);
+      queryParams.append('sort_direction', newDirection);
+      
+      const response = await transactionApi.getAll(queryParams.toString());
+      setAllTransactions(response.data);
+      setFilteredTransactions(response.data);
+      
+      // Update pagination
+      const totalPages = Math.ceil(response.data.length / pageSize);
+      setCurrentPage(1);
+      const paginatedData = response.data.slice(0, pageSize);
+      setTransactions(paginatedData);
+      setPaginationData({
+        items: paginatedData,
+        total: response.data.length,
+        page: 1,
+        per_page: pageSize,
+        pages: totalPages,
+        has_next: 1 < totalPages,
+        has_prev: false,
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to sort transactions';
+      setError(errorMessage);
+      console.error('Error sorting transactions:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [filterConfig, sortConfig.field, sortConfig.direction, pageSize]);
+
+  const handlePageChange = useCallback((page: number) => {
+    if (page < 1 || page > (paginationData?.pages || 1)) return;
+    setCurrentPage(page);
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedData = filteredTransactions.slice(startIndex, endIndex);
+    setTransactions(paginatedData);
+    setPaginationData(prev => prev ? {
+      ...prev,
+      page,
+      items: paginatedData,
+      has_next: page < prev.pages,
+      has_prev: page > 1,
+    } : null);
+  }, [filteredTransactions, pageSize, paginationData?.pages]);
+
+  const renderPagination = () => {
+    if (!paginationData || paginationData.pages <= 1) return null;
+    const pages = [];
+    const currentPageNum = paginationData.page;
+    const totalPages = paginationData.pages;
+    if (currentPageNum > 3) {
+      pages.push(1);
+      if (currentPageNum > 4) pages.push('...');
+    }
+    for (let i = Math.max(1, currentPageNum - 2); i <= Math.min(totalPages, currentPageNum + 2); i++) {
+      pages.push(i);
+    }
+    if (currentPageNum < totalPages - 2) {
+      if (currentPageNum < totalPages - 3) pages.push('...');
+      pages.push(totalPages);
+    }
+    return (
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-t border-gray-200">
+        <div className="flex items-center text-sm text-gray-700">
+          <span>
+            Showing {Math.min((currentPageNum - 1) * paginationData.per_page + 1, paginationData.total)} to{' '}
+            {Math.min(currentPageNum * paginationData.per_page, paginationData.total)} of {paginationData.total} transactions
+          </span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handlePageChange(currentPageNum - 1)}
+            disabled={!paginationData.has_prev}
+            className={`px-3 py-1 text-sm rounded-md ${
+              paginationData.has_prev
+                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            Previous
+          </button>
+          {pages.map((page, index) => (
+            <button
+              key={index}
+              onClick={() => typeof page === 'number' ? handlePageChange(page) : undefined}
+              disabled={page === '...'}
+              className={`px-3 py-1 text-sm rounded-md ${
+                page === currentPageNum
+                  ? 'bg-green-600 text-white'
+                  : page === '...'
+                  ? 'text-gray-400 cursor-default'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+          <button
+            onClick={() => handlePageChange(currentPageNum + 1)}
+            disabled={!paginationData.has_next}
+            className={`px-3 py-1 text-sm rounded-md ${
+              paginationData.has_next
+                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const handleDeleteTransaction = useCallback(async (transactionId: number) => {
     if (!confirm('Are you sure you want to delete this transaction?')) return;
-
     try {
       await transactionApi.delete(transactionId);
-      // Optimistic update - remove from local state immediately
-      setTransactions(prev => prev.filter(t => t.id !== transactionId));
+      fetchTransactions();
     } catch (err) {
       setError('Failed to delete transaction');
       console.error('Error deleting transaction:', err);
-      // Refresh data on error to ensure consistency
-      fetchTransactions();
     }
   }, [fetchTransactions]);
 
   const handleCreateTransaction = useCallback(async (transactionData: TransactionFormData) => {
     try {
-      const response = await transactionApi.create(transactionData);
-      // Optimistic update - add to local state immediately
-      setTransactions(prev => [response.data, ...prev]);
+      await transactionApi.create(transactionData);
+      fetchTransactions();
       setShowCreateModal(false);
     } catch (err) {
       setError('Failed to create transaction');
       console.error('Error creating transaction:', err);
-      throw err; // Re-throw to handle in modal
+      throw err;
     }
-  }, []);
+  }, [fetchTransactions]);
 
   const handleUpdateTransaction = useCallback(async (transactionId: number, transactionData: TransactionFormData) => {
     try {
-      const response = await transactionApi.update(transactionId, transactionData);
-      // Optimistic update - update in local state immediately
-      setTransactions(prev => prev.map(t => t.id === transactionId ? response.data : t));
+      await transactionApi.update(transactionId, transactionData);
+      fetchTransactions();
       setEditingTransaction(null);
     } catch (err) {
       setError('Failed to update transaction');
       console.error('Error updating transaction:', err);
-      throw err; // Re-throw to handle in modal
+      throw err;
     }
-  }, []);
+  }, [fetchTransactions]);
 
   const handleCsvImportSuccess = useCallback(() => {
-    // Refresh transactions after successful CSV import
     fetchTransactions();
     setShowCsvImportModal(false);
   }, [fetchTransactions]);
-
-  // Memoized filtered transactions for better performance
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter(transaction => {
-      const matchesSearch = !searchTerm || 
-        transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        transaction.person.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCategory = !categoryFilter || transaction.category === categoryFilter;
-      return matchesSearch && matchesCategory;
-    });
-  }, [transactions, searchTerm, categoryFilter]);
-
-  const getCategoryBadgeColor = (category: string) => {
-    const colorMap: Record<string, string> = {
-      'Income': 'bg-green-100 text-green-800',
-      'Food & Dining': 'bg-orange-100 text-orange-800',
-      'Transportation': 'bg-blue-100 text-blue-800',
-      'Shopping': 'bg-purple-100 text-purple-800',
-      'Entertainment': 'bg-pink-100 text-pink-800',
-      'Bills & Utilities': 'bg-red-100 text-red-800',
-      'Healthcare': 'bg-teal-100 text-teal-800',
-      'Education': 'bg-indigo-100 text-indigo-800',
-    };
-    return colorMap[category] || 'bg-gray-100 text-gray-800';
-  };
 
   return (
     <AdminLayout>
@@ -799,51 +1088,54 @@ export default function Transactions() {
         <div className="card">
           <div className="card-header">
             <h2 className="card-title">All Transactions</h2>
-            <div className="flex space-x-3">
-              <button 
-                onClick={() => setShowCsvImportModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                aria-label="Import transactions from CSV"
-              >
-                Import CSV
-              </button>
-              <button 
-                onClick={() => setShowCreateModal(true)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                aria-label="Add new transaction"
-              >
-                Add Transaction
-              </button>
-            </div>
           </div>
-
           <div className="card-content">
-            {/* Search and Filter Controls */}
-            <div className="mb-6 flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  placeholder="Search transactions..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
-                  aria-label="Search transactions"
-                />
-              </div>
-              <div>
-                <select 
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
-                  aria-label="Filter by category"
+            {/* Action Bar */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-gray-600">
+                  {filteredTransactions.length} transactions total • {paginationData?.items?.length || 0} on this page
+                </div>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-3 py-1 text-sm rounded-lg transition-colors flex items-center gap-2 ${
+                    showFilters 
+                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
                 >
-                  <option value="">All Categories</option>
-                  {CATEGORIES.map(category => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
-                </select>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-.553.894l-2 1A1 1 0 0110 20v-5.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Filters
+                </button>
+              </div>
+              <div className="flex space-x-3">
+                <button 
+                  onClick={() => setShowCsvImportModal(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Import CSV
+                </button>
+                <button 
+                  onClick={() => setShowCreateModal(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Add Transaction
+                </button>
               </div>
             </div>
+
+            {/* Filter Panel */}
+            {showFilters && (
+              <FilterPanel
+                filters={transactionFilterDefs}
+                filterState={filterConfig}
+                onFilterChange={handleFilterChange}
+                onClear={clearFilters}
+                onApply={applyFilters}
+              />
+            )}
 
             {/* Error Display */}
             {error && (
@@ -865,103 +1157,120 @@ export default function Transactions() {
                 <span className="ml-2 text-gray-600">Loading transactions...</span>
               </div>
             ) : (
-              /* Transactions Table */
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-500">
-                  <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3">Date</th>
-                      <th scope="col" className="px-6 py-3">Type</th>
-                      <th scope="col" className="px-6 py-3 hidden sm:table-cell">Person</th>
-                      <th scope="col" className="px-6 py-3">Category</th>
-                      <th scope="col" className="px-6 py-3">Description</th>
-                      <th scope="col" className="px-6 py-3">Amount</th>
-                      <th scope="col" className="px-6 py-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTransactions.length === 0 ? (
+              <>
+                <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-sm text-left text-gray-500">
+                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                       <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                          {searchTerm || categoryFilter ? 'No transactions match your filters' : 'No transactions found'}
-                        </td>
+                        <th scope="col" className="px-6 py-3">
+                          <SortableHeader field="date" label="Date" sortConfig={sortConfig} onSort={handleSort} />
+                        </th>
+                        <th scope="col" className="px-6 py-3">
+                          <SortableHeader field="type" label="Type" sortConfig={sortConfig} onSort={handleSort} />
+                        </th>
+                        <th scope="col" className="px-6 py-3 hidden sm:table-cell">
+                          <SortableHeader field="person" label="Person" sortConfig={sortConfig} onSort={handleSort} />
+                        </th>
+                        <th scope="col" className="px-6 py-3">
+                          <SortableHeader field="category" label="Category" sortConfig={sortConfig} onSort={handleSort} />
+                        </th>
+                        <th scope="col" className="px-6 py-3 max-w-xs">
+                          <SortableHeader field="description" label="Description" sortConfig={sortConfig} onSort={handleSort} />
+                        </th>
+                        <th scope="col" className="px-6 py-3">
+                          <SortableHeader field="amount" label="Amount" sortConfig={sortConfig} onSort={handleSort} />
+                        </th>
+                        <th scope="col" className="px-6 py-3">Actions</th>
                       </tr>
-                    ) : (
-                      filteredTransactions.map((transaction) => (
-                        <tr key={transaction.id} className="bg-white border-b hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 font-medium text-gray-900">
-                            {new Date(transaction.date).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="capitalize">{transaction.type}</span>
-                          </td>
-                          <td className="px-6 py-4 hidden sm:table-cell">{transaction.person}</td>
-                          <td className="px-6 py-4">
-                            <span className={`text-xs font-medium px-2.5 py-0.5 rounded ${getCategoryBadgeColor(transaction.category)}`}>
-                              {transaction.category}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 max-w-xs truncate" title={transaction.description}>
-                            {transaction.description}
-                          </td>
-                          <td className={`px-6 py-4 font-medium ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {transaction.amount >= 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex space-x-2">
-                              <button 
-                                onClick={() => setEditingTransaction(transaction)}
-                                className="text-blue-600 hover:text-blue-900 transition-colors"
-                                aria-label={`Edit transaction ${transaction.description}`}
-                              >
-                                Edit
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteTransaction(transaction.id)}
-                                className="text-red-600 hover:text-red-900 transition-colors"
-                                aria-label={`Delete transaction ${transaction.description}`}
-                              >
-                                Delete
-                              </button>
-                            </div>
+                    </thead>
+                    <tbody>
+                      {paginationData?.total === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                            {Object.values(filterConfig).some(v => v !== '') 
+                              ? 'No transactions match your filters' 
+                              : 'No transactions found'
+                            }
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      ) : (
+                        paginationData?.items?.map((transaction) => (
+                          <tr key={transaction.id} className="bg-white border-b hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4 font-medium text-gray-900">
+                              {new Date(transaction.date).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="capitalize">{transaction.type}</span>
+                            </td>
+                            <td className="px-6 py-4 hidden sm:table-cell">{transaction.person}</td>
+                            <td className="px-6 py-4">
+                              <span className={`text-xs font-medium px-2.5 py-0.5 rounded ${getCategoryBadgeColor(transaction.category)}`}>
+                                {transaction.category}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 max-w-xs truncate" title={transaction.description}>
+                              {transaction.description}
+                            </td>
+                            <td className={`px-6 py-4 font-medium ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {transaction.amount >= 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex space-x-2">
+                                <button 
+                                  onClick={() => setEditingTransaction(transaction)}
+                                  className="text-blue-600 hover:text-blue-900 transition-colors"
+                                  aria-label={`Edit transaction ${transaction.description}`}
+                                >
+                                  Edit
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteTransaction(transaction.id)}
+                                  className="text-red-600 hover:text-red-900 transition-colors"
+                                  aria-label={`Delete transaction ${transaction.description}`}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {renderPagination()}
+              </>
+            )}
+
+            {/* Modals */}
+            {showCreateModal && (
+              <TransactionModal
+                isOpen={showCreateModal}
+                onClose={() => setShowCreateModal(false)}
+                onSubmit={handleCreateTransaction}
+                title="Create New Transaction"
+              />
+            )}
+
+            {showCsvImportModal && (
+              <CsvImportModal
+                isOpen={showCsvImportModal}
+                onClose={() => setShowCsvImportModal(false)}
+                onImportSuccess={handleCsvImportSuccess}
+              />
+            )}
+
+            {editingTransaction && (
+              <TransactionModal
+                isOpen={!!editingTransaction}
+                onClose={() => setEditingTransaction(null)}
+                onSubmit={(data) => handleUpdateTransaction(editingTransaction.id, data)}
+                title="Edit Transaction"
+                initialData={editingTransaction}
+              />
             )}
           </div>
         </div>
-
-        {/* Modals */}
-        {showCreateModal && (
-          <TransactionModal
-            isOpen={showCreateModal}
-            onClose={() => setShowCreateModal(false)}
-            onSubmit={handleCreateTransaction}
-            title="Create New Transaction"
-          />
-        )}
-
-        {showCsvImportModal && (
-          <CsvImportModal
-            isOpen={showCsvImportModal}
-            onClose={() => setShowCsvImportModal(false)}
-            onImportSuccess={handleCsvImportSuccess}
-          />
-        )}
-
-        {editingTransaction && (
-          <TransactionModal
-            isOpen={!!editingTransaction}
-            onClose={() => setEditingTransaction(null)}
-            onSubmit={(data) => handleUpdateTransaction(editingTransaction.id, data)}
-            title="Edit Transaction"
-            initialData={editingTransaction}
-          />
-        )}
       </div>
     </AdminLayout>
   );
