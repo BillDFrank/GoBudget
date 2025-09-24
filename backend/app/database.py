@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-logger.info(f"DATABASE_URL loaded: {DATABASE_URL}")
 
 # Create a base for models
 Base = declarative_base()
