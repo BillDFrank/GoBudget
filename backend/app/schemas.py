@@ -18,6 +18,40 @@ class User(UserBase):
         from_attributes = True
 
 
+class CategoryBase(BaseModel):
+    name: str
+
+
+class CategoryCreate(CategoryBase):
+    pass
+
+
+class Category(CategoryBase):
+    id: int
+    user_id: int
+    is_default: bool
+
+    class Config:
+        from_attributes = True
+
+
+class PersonBase(BaseModel):
+    name: str
+
+
+class PersonCreate(PersonBase):
+    pass
+
+
+class Person(PersonBase):
+    id: int
+    user_id: int
+    is_default: bool
+
+    class Config:
+        from_attributes = True
+
+
 class TransactionBase(BaseModel):
     date: date
     type: str
@@ -65,9 +99,9 @@ class ReceiptBase(BaseModel):
     branch: str
     invoice: Optional[str] = None
     date: date
-    total: float  # Total before discounts
-    total_discount: Optional[float] = 0  # Total discount amount
-    total_paid: float  # Total amount paid (after discounts)
+    total: float
+    total_discount: Optional[float] = 0
+    total_paid: float
 
 
 class ReceiptCreate(ReceiptBase):
@@ -91,13 +125,13 @@ class ReceiptUploadResponse(BaseModel):
 
 
 class SpendingSummary(BaseModel):
-    period: str  # "week" or "month"
+    period: str
     start_date: date
     end_date: date
     total_spent: float
     receipt_count: int
     average_per_receipt: float
-    top_categories: List[dict]  # [{"category": "Food", "amount": 100.50}, ...]
+    top_categories: List[dict]
 
 
 class PaginatedReceipts(BaseModel):
@@ -111,9 +145,8 @@ class PaginatedReceipts(BaseModel):
 
 
 class ReceiptFilterOptions(BaseModel):
-    """Available filter options for receipts"""
     markets: List[str]
     branches: List[str]
-    date_range: dict  # {"min": "2024-01-01", "max": "2024-12-31"}
-    total_range: dict  # {"min": 0.0, "max": 500.0}
-    discount_range: dict  # {"min": 0.0, "max": 100.0"}
+    date_range: dict
+    total_range: dict
+    discount_range: dict

@@ -6,8 +6,41 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 import os
 from ..database import get_db
-from ..models import User as UserModel
+from ..models import (
+    User as UserModel, Category as CategoryModel, Person as PersonModel
+)
 from ..schemas import UserCreate, User
+
+DEFAULT_CATEGORIES = [
+    'Food & Dining', 'Groceries', 'Transportation', 'Shopping', 'Entertainment',
+    'Bills & Utilities', 'Income', 'Healthcare', 'Education', 'Other'
+]
+
+DEFAULT_PERSONS = ['Family']
+
+
+def create_default_user_data(db: Session, user_id: int):
+    """Create default categories and persons for a new user"""
+    # Create default categories
+    for category_name in DEFAULT_CATEGORIES:
+        category = CategoryModel(
+            name=category_name,
+            user_id=user_id,
+            is_default=True
+        )
+        db.add(category)
+
+    # Create default persons
+    for person_name in DEFAULT_PERSONS:
+        person = PersonModel(
+            name=person_name,
+            user_id=user_id,
+            is_default=True
+        )
+        db.add(person)
+
+    db.commit()
+
 
 SECRET_KEY = os.getenv("JWT_SECRET")
 if not SECRET_KEY:
@@ -81,6 +114,10 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+
+    # Create default categories and persons for the new user
+    create_default_user_data(db, db_user.id)
+
     return db_user
 
 

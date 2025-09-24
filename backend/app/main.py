@@ -7,17 +7,17 @@ import os
 import logging
 from .database import init_database, get_db
 from . import models
-from .routes import auth, transactions, dashboard, receipts, outlook
+from .routes import (
+    auth, transactions, dashboard, receipts, outlook, categories, persons
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
 logger.info(f"Loading .env from: {env_path}")
 load_dotenv(dotenv_path=env_path)
 
-# Try to create tables, but don't fail if database is not available
 try:
     engine = init_database()
     models.Base.metadata.create_all(bind=engine)
@@ -31,9 +31,9 @@ app = FastAPI(title="Go Budget", version="1.0.0",
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3001",  # Local development
-        "https://gobudget.duckdns.org",  # Production domain
-        "http://localhost:3000"  # Alternative local development port
+        "http://localhost:3001",
+        "https://gobudget.duckdns.org",
+        "http://localhost:3000"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -47,6 +47,9 @@ app.include_router(
     dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(receipts.router, prefix="/api/receipts", tags=["receipts"])
 app.include_router(outlook.router, prefix="/api/outlook", tags=["outlook"])
+app.include_router(categories.router,
+                   prefix="/api/categories", tags=["categories"])
+app.include_router(persons.router, prefix="/api/persons", tags=["persons"])
 
 
 @app.get("/")
@@ -62,12 +65,18 @@ def health_check():
 @app.get("/api/health/db")
 def db_health_check(db: Session = Depends(get_db)):
     try:
-        # Try to execute a simple query with proper text() declaration
         from sqlalchemy import text
-        result = db.execute(text("SELECT 1"))
-        return {"status": "database healthy", "timestamp": datetime.now().isoformat()}
+        db.execute(text("SELECT 1"))
+        return {
+            "status": "database healthy",
+            "timestamp": datetime.now().isoformat()
+        }
     except Exception as e:
-        return {"status": "database error", "error": str(e), "timestamp": datetime.now().isoformat()}
+        return {
+            "status": "database error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 
 @app.get("/api/debug/users")

@@ -1,21 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FilterPanel, SortableHeader, type FilterDef, type SortConfig } from '../components/Filters';
 import AdminLayout from '../layout/AdminLayout';
-import { transactionApi } from '../lib/api';
-// Transaction types and categories
-const DEFAULT_TRANSACTION_TYPES = ['Expense', 'Income'];
-
-const DEFAULT_CATEGORIES = [
-  'Food & Dining',
-  'Transportation', 
-  'Shopping',
-  'Entertainment',
-  'Bills & Utilities',
-  'Income',
-  'Healthcare',
-  'Education',
-  'Other'
-];
+import { transactionApi, categoriesApi, personsApi } from '../lib/api';
+// Transaction types (these remain static)
+const DEFAULT_TRANSACTION_TYPES = ['Expense', 'Income', 'Transfer'];
 
 interface Transaction {
   id: number;
@@ -46,12 +34,15 @@ interface TransactionModalProps {
   onSubmit: (data: TransactionFormData) => Promise<void>;
   title: string;
   initialData?: Transaction;
+  categories: any[];
+  persons: any[];
 }
 
 interface CsvImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportSuccess: () => void;
+  categories: any[];
 }
 
 const TransactionModal: React.FC<TransactionModalProps> = ({ 
@@ -59,7 +50,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   onClose, 
   onSubmit, 
   title, 
-  initialData 
+  initialData,
+  categories,
+  persons
 }) => {
   const [formData, setFormData] = useState<TransactionFormData>({
     date: initialData?.date || new Date().toISOString().split('T')[0],
@@ -141,15 +134,20 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
             <label htmlFor="person" className="block text-sm font-medium text-gray-700 mb-1">
               Person/Entity
             </label>
-            <input
+            <select
               id="person"
-              type="text"
               value={formData.person}
               onChange={(e) => updateFormData('person', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              placeholder="Enter person or entity"
               required
-            />
+            >
+              <option value="">Select Person</option>
+              {persons.map(person => (
+                <option key={typeof person === 'string' ? person : person.id} value={typeof person === 'string' ? person : person.name}>
+                  {typeof person === 'string' ? person : person.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -164,8 +162,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               required
             >
               <option value="">Select Category</option>
-              {DEFAULT_CATEGORIES.map(category => (
-                <option key={category} value={category}>{category}</option>
+              {categories.map(category => (
+                <option key={typeof category === 'string' ? category : category.id} value={typeof category === 'string' ? category : category.name}>
+                  {typeof category === 'string' ? category : category.name}
+                </option>
               ))}
             </select>
           </div>
@@ -224,7 +224,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   );
 };
 
-const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImportSuccess }) => {
+const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImportSuccess, categories }) => {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
@@ -398,7 +398,7 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
                   <li>• <strong>amount</strong>: Transaction amount - positive for income, negative for expenses (required)</li>
                 </ul>
                 <p className="text-sm text-blue-700 mt-2">
-                  <strong>Valid categories:</strong> Food & Dining, Transportation, Shopping, Entertainment, Bills & Utilities, Income, Healthcare, Education, Other
+                  <strong>Categories and Persons:</strong> You can use any category or person name. New ones will be created automatically for your account.
                 </p>
               </div>
 
@@ -643,8 +643,10 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
                     onChange={(e) => setEditingTransaction({...editingTransaction, category: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   >
-                    {DEFAULT_CATEGORIES.map(category => (
-                      <option key={category} value={category}>{category}</option>
+                    {categories.map(category => (
+                      <option key={typeof category === 'string' ? category : category.id} value={typeof category === 'string' ? category : category.name}>
+                        {typeof category === 'string' ? category : category.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -731,20 +733,35 @@ export default function Transactions() {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [paginationData, setPaginationData] = useState<PaginatedTransactions | null>(null);
+  
+  // Dynamic data from API
+  const [categories, setCategories] = useState<any[]>([]);
+  const [persons, setPersons] = useState<any[]>([]);
+  
   const pageSize = 25;
 
-  // Dynamic options based on actual data
+  // Dynamic options based on actual data and API categories/persons
   const dynamicOptions = useMemo(() => {
     const types = Array.from(new Set(allTransactions.map(t => t.type))).filter(Boolean);
-    const categories = Array.from(new Set(allTransactions.map(t => t.category))).filter(Boolean);
-    const persons = Array.from(new Set(allTransactions.map(t => t.person))).filter(Boolean);
+    const transactionCategories = Array.from(new Set(allTransactions.map(t => t.category))).filter(Boolean);
+    const transactionPersons = Array.from(new Set(allTransactions.map(t => t.person))).filter(Boolean);
+    
+    // Combine API data with transaction data for completeness
+    const allCategories = Array.from(new Set([
+      ...categories.map(c => c.name),
+      ...transactionCategories
+    ]));
+    const allPersons = Array.from(new Set([
+      ...persons.map(p => p.name),
+      ...transactionPersons
+    ]));
 
     return {
       types,
-      categories,
-      persons,
+      categories: allCategories,
+      persons: allPersons,
     };
-  }, [allTransactions]);
+  }, [allTransactions, categories, persons]);
 
   const transactionFilterDefs = useMemo<FilterDef[]>(() => [
     { key: 'type', label: 'Type', type: 'select', options: dynamicOptions.types },
@@ -788,9 +805,29 @@ export default function Transactions() {
     }
   }, [pageSize]);
 
+  const fetchCategories = useCallback(async () => {
+    try {
+      const response = await categoriesApi.getAll();
+      setCategories(response.data);
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+    }
+  }, []);
+
+  const fetchPersons = useCallback(async () => {
+    try {
+      const response = await personsApi.getAll();
+      setPersons(response.data);
+    } catch (err) {
+      console.error('Error fetching persons:', err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchTransactions();
-  }, [fetchTransactions]);
+    fetchCategories();
+    fetchPersons();
+  }, [fetchTransactions, fetchCategories, fetchPersons]);
 
   const handleFilterChange = useCallback((key: string, value: string) => {
     setFilterConfig(prev => ({ ...prev, [key]: value }));
@@ -1249,6 +1286,8 @@ export default function Transactions() {
                 onClose={() => setShowCreateModal(false)}
                 onSubmit={handleCreateTransaction}
                 title="Create New Transaction"
+                categories={categories}
+                persons={persons}
               />
             )}
 
@@ -1257,6 +1296,7 @@ export default function Transactions() {
                 isOpen={showCsvImportModal}
                 onClose={() => setShowCsvImportModal(false)}
                 onImportSuccess={handleCsvImportSuccess}
+                categories={categories}
               />
             )}
 
@@ -1267,6 +1307,8 @@ export default function Transactions() {
                 onSubmit={(data) => handleUpdateTransaction(editingTransaction.id, data)}
                 title="Edit Transaction"
                 initialData={editingTransaction}
+                categories={categories}
+                persons={persons}
               />
             )}
           </div>

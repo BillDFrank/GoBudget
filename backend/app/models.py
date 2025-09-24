@@ -1,4 +1,7 @@
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey
+from sqlalchemy import (
+    Column, Integer, String, Float, Date, DateTime, ForeignKey, Boolean,
+    UniqueConstraint
+)
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -14,6 +17,41 @@ class User(Base):
     outlook_token_expires = Column(DateTime, nullable=True)
     outlook_state = Column(String, nullable=True)
     outlook_last_sync = Column(DateTime, nullable=True)
+
+    categories = relationship(
+        "Category", back_populates="user", cascade="all, delete-orphan")
+    persons = relationship(
+        "Person", back_populates="user", cascade="all, delete-orphan")
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_default = Column(Boolean, default=False, nullable=False)
+
+    user = relationship("User", back_populates="categories")
+
+    __table_args__ = (
+        UniqueConstraint('name', 'user_id', name='unique_category_per_user'),
+    )
+
+
+class Person(Base):
+    __tablename__ = "persons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_default = Column(Boolean, default=False, nullable=False)
+
+    user = relationship("User", back_populates="persons")
+
+    __table_args__ = (
+        UniqueConstraint('name', 'user_id', name='unique_person_per_user'),
+    )
 
 
 class Transaction(Base):
@@ -39,16 +77,16 @@ class Receipt(Base):
     branch = Column(String, nullable=False)
     invoice = Column(String)
     date = Column(Date, nullable=False)
-    total = Column(Float, nullable=False)  # Total amount before discounts
-    total_discount = Column(Float, nullable=False, default=0)  # Total discount amount
-    total_paid = Column(Float, nullable=False)  # Total amount actually paid (after discounts)
-    # Prevent duplicate processing
+    total = Column(Float, nullable=False)
+    total_discount = Column(Float, nullable=False, default=0)
+    total_paid = Column(Float, nullable=False)
     filename = Column(String, nullable=True, unique=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     user = relationship("User")
     products = relationship(
-        "ReceiptProduct", back_populates="receipt", cascade="all, delete-orphan")
+        "ReceiptProduct", back_populates="receipt",
+        cascade="all, delete-orphan")
 
 
 class ReceiptProduct(Base):

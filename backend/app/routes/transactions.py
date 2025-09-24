@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
 from ..database import get_db
-from ..models import Transaction as TransactionModel, User
+from ..models import (
+    Transaction as TransactionModel, User, Category as CategoryModel,
+    Person as PersonModel
+)
 from ..schemas import TransactionCreate, Transaction as TransactionSchema
 from .auth import get_current_user
 import pandas as pd
@@ -11,6 +14,82 @@ from datetime import datetime
 from typing import Optional
 
 router = APIRouter()
+
+
+def get_user_categories(db: Session, user_id: int):
+    """Get all categories for a user as a set of names"""
+    categories = db.query(CategoryModel).filter(
+        CategoryModel.user_id == user_id
+    ).all()
+    return {cat.name for cat in categories}
+
+
+def get_user_persons(db: Session, user_id: int):
+    """Get all persons for a user as a set of names"""
+    persons = db.query(PersonModel).filter(
+        PersonModel.user_id == user_id
+    ).all()
+    return {person.name for person in persons}
+
+
+def create_category_if_not_exists(db: Session, user_id: int, category_name: str):
+    """Create a new category for the user if it doesn't exist"""
+    existing = db.query(CategoryModel).filter(
+        CategoryModel.user_id == user_id,
+        CategoryModel.name == category_name
+    ).first()
+
+    if not existing:
+        new_category = CategoryModel(
+            name=category_name,
+            user_id=user_id,
+            is_default=False
+        )
+        db.add(new_category)
+        return new_category
+    return existing
+
+
+def create_person_if_not_exists(db: Session, user_id: int, person_name: str):
+    """Create a new person for the user if it doesn't exist"""
+    existing = db.query(PersonModel).filter(
+        PersonModel.user_id == user_id,
+        PersonModel.name == person_name
+    ).first()
+
+    if not existing:
+        new_person = PersonModel(
+            name=person_name,
+            user_id=user_id,
+            is_default=False
+        )
+        db.add(new_person)
+        return new_person
+    return existing
+
+
+@router.get("/categories", response_model=list[str])
+def get_transaction_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all categories for the current user"""
+    categories = db.query(CategoryModel).filter(
+        CategoryModel.user_id == current_user.id
+    ).all()
+    return [cat.name for cat in categories]
+
+
+@router.get("/persons", response_model=list[str])
+def get_transaction_persons(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all persons for the current user"""
+    persons = db.query(PersonModel).filter(
+        PersonModel.user_id == current_user.id
+    ).all()
+    return [person.name for person in persons]
 
 
 @router.get("/", response_model=list[TransactionSchema])
@@ -190,13 +269,15 @@ async def import_csv_transactions(
         # Validate and process data
         errors = []
         valid_transactions = []
+        new_categories = set()
+        new_persons = set()
 
-        # Valid transaction types and categories (based on frontend constants)
-        valid_types = {'Income', 'Expense', 'Transfer'}
-        valid_categories = {
-            'Food & Dining', 'Transportation', 'Shopping', 'Entertainment',
-            'Bills & Utilities', 'Income', 'Healthcare', 'Education', 'Other'
-        }
+        # Get user's current categories and persons
+        user_categories = get_user_categories(db, current_user.id)
+        user_persons = get_user_persons(db, current_user.id)
+
+        # Valid transaction types (these remain static)
+        valid_types = {'Income', 'Expense', 'Investment', 'Saving'}
 
         for index, row in df.iterrows():
             row_num = index + 2  # +2 because index starts at 0 and we have a header row

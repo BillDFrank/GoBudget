@@ -95,3 +95,19 @@ export const outlookApi = {
   getSyncProgress: () => api.get('/outlook/sync-progress'),
   disconnect: () => api.post('/outlook/disconnect'),
 };
+
+// Categories API functions
+export const categoriesApi = {
+  getAll: () => api.get('/categories/'),
+  create: (data: { name: string }) => api.post('/categories/', data),
+  update: (id: number, data: { name: string }) => api.put(`/categories/${id}`, data),
+  delete: (id: number) => api.delete(`/categories/${id}`),
+};
+
+// Persons API functions
+export const personsApi = {
+  getAll: () => api.get('/persons/'),
+  create: (data: { name: string }) => api.post('/persons/', data),
+  update: (id: number, data: { name: string }) => api.put(`/persons/${id}`, data),
+  delete: (id: number) => api.delete(`/persons/${id}`),
+};
