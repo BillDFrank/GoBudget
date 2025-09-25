@@ -3,7 +3,7 @@ import { FilterPanel, SortableHeader, type FilterDef, type SortConfig } from '..
 import AdminLayout from '../layout/AdminLayout';
 import { transactionApi, categoriesApi, personsApi } from '../lib/api';
 // Transaction types (these remain static)
-const DEFAULT_TRANSACTION_TYPES = ['Expense', 'Income', 'Transfer'];
+const DEFAULT_TRANSACTION_TYPES = ['Income', 'Expense', 'Investment', 'Saving'];
 
 interface Transaction {
   id: number;
