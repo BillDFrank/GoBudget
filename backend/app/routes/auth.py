@@ -161,7 +161,7 @@ def debug_user(username: str, db: Session = Depends(get_db)):
     user = db.query(UserModel).filter(UserModel.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return {
         "username": user.username,
         "password_length": (
