@@ -1,7 +1,7 @@
 import AdminLayout from '../layout/AdminLayout';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { outlookApi } from '../lib/api';
+import { outlookApi, categoriesApi, personsApi } from '../lib/api';
 
 export default function Settings() {
   const router = useRouter();
@@ -11,9 +11,18 @@ export default function Settings() {
   const [message, setMessage] = useState('');
   const [showCodeInput, setShowCodeInput] = useState(false);
   const [authCode, setAuthCode] = useState('');
+  
+  const [categories, setCategories] = useState([]);
+  const [persons, setPersons] = useState([]);
+  const [newCategory, setNewCategory] = useState('');
+  const [newPerson, setNewPerson] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editingPerson, setEditingPerson] = useState(null);
 
   useEffect(() => {
     checkOutlookStatus();
+    loadCategories();
+    loadPersons();
     
     // Handle OAuth callback from Microsoft
     if (router.query.code && router.query.state) {
@@ -46,6 +55,24 @@ export default function Settings() {
       setOutlookConnected(response.data.connected);
     } catch (error) {
       console.error('Failed to check Outlook status:', error);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const response = await categoriesApi.getAll();
+      setCategories(response.data);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+    }
+  };
+
+  const loadPersons = async () => {
+    try {
+      const response = await personsApi.getAll();
+      setPersons(response.data);
+    } catch (error) {
+      console.error('Failed to load persons:', error);
     }
   };
 
@@ -152,6 +179,80 @@ export default function Settings() {
     } catch (error) {
       console.error('Failed to disconnect Outlook:', error);
       setMessage('Failed to disconnect Outlook');
+    }
+  };
+
+  // Categories management functions
+  const addCategory = async () => {
+    if (!newCategory.trim()) return;
+    try {
+      await categoriesApi.create({ name: newCategory.trim() });
+      setNewCategory('');
+      await loadCategories();
+      setMessage('Category added successfully');
+    } catch (error) {
+      console.error('Failed to add category:', error);
+      setMessage('Failed to add category');
+    }
+  };
+
+  const updateCategory = async (id, newName) => {
+    try {
+      await categoriesApi.update(id, { name: newName });
+      setEditingCategory(null);
+      await loadCategories();
+      setMessage('Category updated successfully');
+    } catch (error) {
+      console.error('Failed to update category:', error);
+      setMessage('Failed to update category');
+    }
+  };
+
+  const deleteCategory = async (id) => {
+    try {
+      await categoriesApi.delete(id);
+      await loadCategories();
+      setMessage('Category deleted successfully');
+    } catch (error) {
+      console.error('Failed to delete category:', error);
+      setMessage('Failed to delete category');
+    }
+  };
+
+  // Persons management functions
+  const addPerson = async () => {
+    if (!newPerson.trim()) return;
+    try {
+      await personsApi.create({ name: newPerson.trim() });
+      setNewPerson('');
+      await loadPersons();
+      setMessage('Person added successfully');
+    } catch (error) {
+      console.error('Failed to add person:', error);
+      setMessage('Failed to add person');
+    }
+  };
+
+  const updatePerson = async (id, newName) => {
+    try {
+      await personsApi.update(id, { name: newName });
+      setEditingPerson(null);
+      await loadPersons();
+      setMessage('Person updated successfully');
+    } catch (error) {
+      console.error('Failed to update person:', error);
+      setMessage('Failed to update person');
+    }
+  };
+
+  const deletePerson = async (id) => {
+    try {
+      await personsApi.delete(id);
+      await loadPersons();
+      setMessage('Person deleted successfully');
+    } catch (error) {
+      console.error('Failed to delete person:', error);
+      setMessage('Failed to delete person');
     }
   };
 
@@ -337,6 +438,166 @@ export default function Settings() {
                   <button className="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700">
                     Export
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">Categories Management</h2>
+            </div>
+            <div className="card-content">
+              <div className="space-y-4">
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    placeholder="Enter new category name"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    onKeyPress={(e) => e.key === 'Enter' && addCategory()}
+                  />
+                  <button
+                    onClick={addCategory}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Add
+                  </button>
+                </div>
+                
+                <div className="max-h-60 overflow-y-auto">
+                  {categories.map((category: any) => (
+                    <div key={category.id} className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700">
+                      {editingCategory === category.id ? (
+                        <div className="flex space-x-2 flex-1">
+                          <input
+                            type="text"
+                            defaultValue={category.name}
+                            onBlur={(e) => updateCategory(category.id, e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && updateCategory(category.id, e.target.value)}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => setEditingCategory(null)}
+                            className="px-2 py-1 text-gray-600 hover:text-gray-800"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="flex-1">
+                            {category.name}
+                            {category.is_default && (
+                              <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">
+                                Default
+                              </span>
+                            )}
+                          </span>
+                          <div className="flex space-x-2">
+                            {!category.is_default && (
+                              <>
+                                <button
+                                  onClick={() => setEditingCategory(category.id)}
+                                  className="text-blue-600 hover:text-blue-800"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => deleteCategory(category.id)}
+                                  className="text-red-600 hover:text-red-800"
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">Persons Management</h2>
+            </div>
+            <div className="card-content">
+              <div className="space-y-4">
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={newPerson}
+                    onChange={(e) => setNewPerson(e.target.value)}
+                    placeholder="Enter new person name"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    onKeyPress={(e) => e.key === 'Enter' && addPerson()}
+                  />
+                  <button
+                    onClick={addPerson}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Add
+                  </button>
+                </div>
+                
+                <div className="max-h-60 overflow-y-auto">
+                  {persons.map((person: any) => (
+                    <div key={person.id} className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700">
+                      {editingPerson === person.id ? (
+                        <div className="flex space-x-2 flex-1">
+                          <input
+                            type="text"
+                            defaultValue={person.name}
+                            onBlur={(e) => updatePerson(person.id, e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && updatePerson(person.id, e.target.value)}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => setEditingPerson(null)}
+                            className="px-2 py-1 text-gray-600 hover:text-gray-800"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="flex-1">
+                            {person.name}
+                            {person.is_default && (
+                              <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">
+                                Default
+                              </span>
+                            )}
+                          </span>
+                          <div className="flex space-x-2">
+                            {!person.is_default && (
+                              <>
+                                <button
+                                  onClick={() => setEditingPerson(person.id)}
+                                  className="text-blue-600 hover:text-blue-800"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => deletePerson(person.id)}
+                                  className="text-red-600 hover:text-red-800"
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
