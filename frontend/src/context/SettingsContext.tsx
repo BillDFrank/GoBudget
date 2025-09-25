@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { settingsApi } from '../lib/api';
+import { useAuthStore } from '../store/auth';
 
 interface UserSettings {
   currency: string;
@@ -40,27 +41,54 @@ export const useSettings = () => {
   return context;
 };
 
+// Safe version of useSettings that can be used anywhere
+export const useSettingsSafe = () => {
+  const context = useContext(SettingsContext);
+  return context; // Returns undefined if not within SettingsProvider
+};
+
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<UserSettings>(defaultSettings);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    // Only load settings if user is authenticated
+    if (isAuthenticated) {
+      loadSettings();
+    } else {
+      // Reset to defaults when not authenticated
+      setSettings(defaultSettings);
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
 
   const loadSettings = async () => {
+    // Don't try to load settings if not authenticated
+    if (!isAuthenticated) {
+      return;
+    }
+
+    setLoading(true);
     try {
       const response = await settingsApi.get();
       setSettings(response.data);
     } catch (error) {
       console.error('Failed to load settings:', error);
       // Use defaults if loading fails
+      setSettings(defaultSettings);
     } finally {
       setLoading(false);
     }
   };
 
   const updateSettings = async (updates: Partial<UserSettings>) => {
+    // Don't try to update settings if not authenticated
+    if (!isAuthenticated) {
+      console.warn('Cannot update settings: user not authenticated');
+      return;
+    }
+
     try {
       const response = await settingsApi.update(updates);
       setSettings(response.data);
