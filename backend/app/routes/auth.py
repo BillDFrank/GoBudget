@@ -12,7 +12,8 @@ from ..models import (
 from ..schemas import UserCreate, User
 
 DEFAULT_CATEGORIES = [
-    'Food & Dining', 'Groceries', 'Transportation', 'Shopping', 'Entertainment',
+    'Food & Dining', 'Groceries', 'Transportation', 'Shopping',
+    'Entertainment',
     'Bills & Utilities', 'Income', 'Healthcare', 'Education', 'Other'
 ]
 
@@ -77,12 +78,23 @@ def authenticate_user(db: Session, username: str, password: str):
     user = db.query(UserModel).filter(UserModel.username == username).first()
     if not user:
         return False
-    if not verify_password(password, user.hashed_password):
+    try:
+        if not verify_password(password, user.hashed_password):
+            return False
+    except ValueError as e:
+        # Handle bcrypt errors (like password too long)
+        print(f"Password verification error for user {username}: {e}")
+        return False
+    except Exception as e:
+        # Handle any other password verification errors
+        print(f"Unexpected password verification error for user {username}: "
+              f"{e}")
         return False
     return user
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def get_current_user(token: str = Depends(oauth2_scheme),
+                     db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -122,7 +134,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(form_data: OAuth2PasswordRequestForm = Depends(),
+          db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -140,3 +153,22 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 @router.get("/me", response_model=User)
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/debug/user/{username}")
+def debug_user(username: str, db: Session = Depends(get_db)):
+    """Temporary debug endpoint to check user data"""
+    user = db.query(UserModel).filter(UserModel.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "username": user.username,
+        "password_length": (
+            len(user.hashed_password) if user.hashed_password else 0
+        ),
+        "password_starts_with": (user.hashed_password[:10]
+                                 if user.hashed_password else None),
+        "password_is_valid_bcrypt": (user.hashed_password.startswith('$2b$')
+                                     if user.hashed_password else False)
+    }

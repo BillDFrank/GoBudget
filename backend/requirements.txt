@@ -1,18 +1,32 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-asyncpg
-pydantic
-alembic
-python-jose[cryptography]
-passlib[bcrypt]
-python-multipart
-psycopg2-binary
-python-dotenv
-httpx
-msal
-azure-identity
-msgraph-sdk
-requests
-pytest
-pandas
+# Core FastAPI dependencies
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.9.2
+
+# Database
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+psycopg2-binary==2.9.11
+
+# Authentication - pin working versions
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.3.0
+python-multipart==0.0.19
+
+# Environment and utilities
+python-dotenv==1.0.1
+httpx==0.28.1
+requests==2.32.3
+
+# Microsoft Graph API
+msal==1.31.1
+azure-identity==1.25.0
+msgraph-sdk==1.11.0
+
+# Data processing
+pandas==2.3.2
+
+# Testing
+pytest==8.4.2
