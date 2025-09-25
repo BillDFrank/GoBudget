@@ -272,7 +272,6 @@ async def import_csv_transactions(
         # Get user's current categories and persons
         user_categories = get_user_categories(db, current_user.id)
         user_persons = get_user_persons(db, current_user.id)
-
         # Valid transaction types (these remain static)
         valid_types = {'Income', 'Expense', 'Investment', 'Saving'}
 

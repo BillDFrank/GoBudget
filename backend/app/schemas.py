@@ -150,7 +150,7 @@ class ReceiptFilterOptions(BaseModel):
     date_range: dict
     total_range: dict
     discount_range: dict
-
+      
 
 class UserSettingsBase(BaseModel):
     currency: str = "USD"

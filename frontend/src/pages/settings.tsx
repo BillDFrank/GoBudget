@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { outlookApi, categoriesApi, personsApi, settingsApi } from '../lib/api';
 import { useSettings } from '../context/SettingsContext';
 
+
 export default function Settings() {
   const router = useRouter();
   const { settings: userSettings, updateSettings: updateUserSettings, loading: settingsLoading } = useSettings();
@@ -21,7 +22,6 @@ export default function Settings() {
   const [newPerson, setNewPerson] = useState('');
   const [editingCategory, setEditingCategory] = useState<number | null>(null);
   const [editingPerson, setEditingPerson] = useState<number | null>(null);
-
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {

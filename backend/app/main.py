@@ -9,8 +9,8 @@ from .database import init_database, get_db
 from . import models
 from .routes import (
     auth, transactions, dashboard, receipts, outlook, categories, persons,
-    settings
-)
+    settings)
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

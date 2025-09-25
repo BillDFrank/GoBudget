@@ -41,7 +41,6 @@ class UserSettings(Base):
     budget_alerts = Column(Boolean, default=True, nullable=False)
     transaction_alerts = Column(Boolean, default=False, nullable=False)
     weekly_reports = Column(Boolean, default=True, nullable=False)
-
     user = relationship("User", back_populates="settings")
 
 
