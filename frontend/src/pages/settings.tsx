@@ -1,10 +1,14 @@
 import AdminLayout from '../layout/AdminLayout';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { outlookApi, categoriesApi, personsApi } from '../lib/api';
+import { outlookApi, categoriesApi, personsApi, settingsApi } from '../lib/api';
+import { useSettings } from '../context/SettingsContext';
+
 
 export default function Settings() {
   const router = useRouter();
+  const { settings: userSettings, updateSettings: updateUserSettings, loading: settingsLoading } = useSettings();
+  
   const [outlookConnected, setOutlookConnected] = useState(false);
   const [outlookStatus, setOutlookStatus] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -16,8 +20,9 @@ export default function Settings() {
   const [persons, setPersons] = useState([]);
   const [newCategory, setNewCategory] = useState('');
   const [newPerson, setNewPerson] = useState('');
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [editingPerson, setEditingPerson] = useState(null);
+  const [editingCategory, setEditingCategory] = useState<number | null>(null);
+  const [editingPerson, setEditingPerson] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     checkOutlookStatus();
@@ -47,6 +52,35 @@ export default function Settings() {
       return () => clearTimeout(timer);
     }
   }, [message]);
+
+  // Settings handlers
+  const handleSettingsUpdate = async (updates: any) => {
+    setSaving(true);
+    try {
+      await updateUserSettings(updates);
+      setMessage('Settings updated successfully!');
+    } catch (error) {
+      console.error('Failed to update settings:', error);
+      setMessage('Failed to update settings. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetUserSettings = async () => {
+    setSaving(true);
+    try {
+      await settingsApi.reset();
+      setMessage('Settings reset to defaults successfully!');
+      // Reload the page to get fresh settings
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to reset settings:', error);
+      setMessage('Failed to reset settings. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const checkOutlookStatus = async () => {
     try {
@@ -196,7 +230,7 @@ export default function Settings() {
     }
   };
 
-  const updateCategory = async (id, newName) => {
+  const updateCategory = async (id: number, newName: string) => {
     try {
       await categoriesApi.update(id, { name: newName });
       setEditingCategory(null);
@@ -208,7 +242,7 @@ export default function Settings() {
     }
   };
 
-  const deleteCategory = async (id) => {
+  const deleteCategory = async (id: number) => {
     try {
       await categoriesApi.delete(id);
       await loadCategories();
@@ -233,7 +267,7 @@ export default function Settings() {
     }
   };
 
-  const updatePerson = async (id, newName) => {
+  const updatePerson = async (id: number, newName: string) => {
     try {
       await personsApi.update(id, { name: newName });
       setEditingPerson(null);
@@ -245,7 +279,7 @@ export default function Settings() {
     }
   };
 
-  const deletePerson = async (id) => {
+  const deletePerson = async (id: number) => {
     try {
       await personsApi.delete(id);
       await loadPersons();
@@ -287,11 +321,15 @@ export default function Settings() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Currency
                   </label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                    <option>USD - US Dollar</option>
-                    <option>EUR - Euro</option>
-                    <option>GBP - British Pound</option>
-                    <option>CAD - Canadian Dollar</option>
+                  <select 
+                    value={userSettings.currency}
+                    onChange={(e) => handleSettingsUpdate({ currency: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  >
+                    <option value="USD">USD - US Dollar</option>
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="GBP">GBP - British Pound</option>
+                    <option value="CAD">CAD - Canadian Dollar</option>
                   </select>
                 </div>
 
@@ -299,10 +337,14 @@ export default function Settings() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Date Format
                   </label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                    <option>MM/DD/YYYY</option>
-                    <option>DD/MM/YYYY</option>
-                    <option>YYYY-MM-DD</option>
+                  <select 
+                    value={userSettings.date_format}
+                    onChange={(e) => handleSettingsUpdate({ date_format: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  >
+                    <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                    <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                    <option value="YYYY-MM-DD">YYYY-MM-DD</option>
                   </select>
                 </div>
 
@@ -310,11 +352,15 @@ export default function Settings() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Time Zone
                   </label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                    <option>Eastern Time (ET)</option>
-                    <option>Central Time (CT)</option>
-                    <option>Mountain Time (MT)</option>
-                    <option>Pacific Time (PT)</option>
+                  <select 
+                    value={userSettings.timezone}
+                    onChange={(e) => handleSettingsUpdate({ timezone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  >
+                    <option value="Eastern Time (ET)">Eastern Time (ET)</option>
+                    <option value="Central Time (CT)">Central Time (CT)</option>
+                    <option value="Mountain Time (MT)">Mountain Time (MT)</option>
+                    <option value="Pacific Time (PT)">Pacific Time (PT)</option>
                   </select>
                 </div>
 
@@ -326,7 +372,12 @@ export default function Settings() {
                     <p className="text-sm text-gray-500">Enable dark theme</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer"
+                      checked={userSettings.dark_mode}
+                      onChange={(e) => handleSettingsUpdate({ dark_mode: e.target.checked })}
+                    />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
@@ -348,7 +399,12 @@ export default function Settings() {
                     <p className="text-sm text-gray-500">Receive emails about account activity</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={userSettings.email_notifications}
+                      onChange={(e) => handleSettingsUpdate({ email_notifications: e.target.checked })}
+                    />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
@@ -361,7 +417,12 @@ export default function Settings() {
                     <p className="text-sm text-gray-500">Get notified when approaching budget limits</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={userSettings.budget_alerts}
+                      onChange={(e) => handleSettingsUpdate({ budget_alerts: e.target.checked })}
+                    />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
@@ -374,7 +435,12 @@ export default function Settings() {
                     <p className="text-sm text-gray-500">Notifications for new transactions</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={userSettings.transaction_alerts}
+                      onChange={(e) => handleSettingsUpdate({ transaction_alerts: e.target.checked })}
+                    />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
@@ -387,7 +453,12 @@ export default function Settings() {
                     <p className="text-sm text-gray-500">Weekly financial summary emails</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={userSettings.weekly_reports}
+                      onChange={(e) => handleSettingsUpdate({ weekly_reports: e.target.checked })}
+                    />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
@@ -474,8 +545,8 @@ export default function Settings() {
                           <input
                             type="text"
                             defaultValue={category.name}
-                            onBlur={(e) => updateCategory(category.id, e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && updateCategory(category.id, e.target.value)}
+                            onBlur={(e) => updateCategory(category.id, (e.target as HTMLInputElement).value)}
+                            onKeyPress={(e) => e.key === 'Enter' && updateCategory(category.id, (e.target as HTMLInputElement).value)}
                             className="flex-1 px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                             autoFocus
                           />
@@ -554,8 +625,8 @@ export default function Settings() {
                           <input
                             type="text"
                             defaultValue={person.name}
-                            onBlur={(e) => updatePerson(person.id, e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && updatePerson(person.id, e.target.value)}
+                            onBlur={(e) => updatePerson(person.id, (e.target as HTMLInputElement).value)}
+                            onKeyPress={(e) => e.key === 'Enter' && updatePerson(person.id, (e.target as HTMLInputElement).value)}
                             className="flex-1 px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                             autoFocus
                           />
@@ -703,11 +774,18 @@ export default function Settings() {
         </div>
 
         <div className="mt-8 flex justify-end space-x-4">
-          <button className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">
-            Reset to Defaults
+          <button 
+            onClick={resetUserSettings}
+            disabled={settingsLoading}
+            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800 disabled:opacity-50"
+          >
+            {settingsLoading ? 'Resetting...' : 'Reset to Defaults'}
           </button>
-          <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            Save All Settings
+          <button 
+            onClick={() => setMessage('Settings are automatically saved when changed')}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Settings Auto-Saved
           </button>
         </div>
       </div>

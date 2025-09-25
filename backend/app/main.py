@@ -8,8 +8,9 @@ import logging
 from .database import init_database, get_db
 from . import models
 from .routes import (
-    auth, transactions, dashboard, receipts, outlook, categories, persons
-)
+    auth, transactions, dashboard, receipts, outlook, categories, persons,
+    settings)
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ app.include_router(outlook.router, prefix="/api/outlook", tags=["outlook"])
 app.include_router(categories.router,
                    prefix="/api/categories", tags=["categories"])
 app.include_router(persons.router, prefix="/api/persons", tags=["persons"])
+app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
 
 @app.get("/")

@@ -22,6 +22,26 @@ class User(Base):
         "Category", back_populates="user", cascade="all, delete-orphan")
     persons = relationship(
         "Person", back_populates="user", cascade="all, delete-orphan")
+    settings = relationship(
+        "UserSettings", back_populates="user", uselist=False,
+        cascade="all, delete-orphan")
+
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False,
+                     unique=True)
+    currency = Column(String, default="USD", nullable=False)
+    date_format = Column(String, default="MM/DD/YYYY", nullable=False)
+    timezone = Column(String, default="Eastern Time (ET)", nullable=False)
+    dark_mode = Column(Boolean, default=False, nullable=False)
+    email_notifications = Column(Boolean, default=True, nullable=False)
+    budget_alerts = Column(Boolean, default=True, nullable=False)
+    transaction_alerts = Column(Boolean, default=False, nullable=False)
+    weekly_reports = Column(Boolean, default=True, nullable=False)
+    user = relationship("User", back_populates="settings")
 
 
 class Category(Base):

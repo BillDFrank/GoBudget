@@ -150,3 +150,37 @@ class ReceiptFilterOptions(BaseModel):
     date_range: dict
     total_range: dict
     discount_range: dict
+      
+
+class UserSettingsBase(BaseModel):
+    currency: str = "USD"
+    date_format: str = "MM/DD/YYYY"
+    timezone: str = "Eastern Time (ET)"
+    dark_mode: bool = False
+    email_notifications: bool = True
+    budget_alerts: bool = True
+    transaction_alerts: bool = False
+    weekly_reports: bool = True
+
+
+class UserSettingsCreate(UserSettingsBase):
+    pass
+
+
+class UserSettingsUpdate(BaseModel):
+    currency: Optional[str] = None
+    date_format: Optional[str] = None
+    timezone: Optional[str] = None
+    dark_mode: Optional[bool] = None
+    email_notifications: Optional[bool] = None
+    budget_alerts: Optional[bool] = None
+    transaction_alerts: Optional[bool] = None
+    weekly_reports: Optional[bool] = None
+
+
+class UserSettings(UserSettingsBase):
+    id: int
+    user_id: int
+
+    class Config:
+        from_attributes = True
