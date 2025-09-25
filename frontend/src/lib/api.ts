@@ -111,3 +111,10 @@ export const personsApi = {
   update: (id: number, data: { name: string }) => api.put(`/persons/${id}`, data),
   delete: (id: number) => api.delete(`/persons/${id}`),
 };
+
+// Settings API functions
+export const settingsApi = {
+  get: () => api.get('/settings/'),
+  update: (data: any) => api.put('/settings/', data),
+  reset: () => api.post('/settings/reset'),
+};
