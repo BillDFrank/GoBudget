@@ -15,13 +15,13 @@ def get_income_overview(db: Session = Depends(get_db), current_user: User = Depe
     # Calculate total income
     total_income = db.query(func.sum(Transaction.amount)).filter(
         Transaction.user_id == current_user.id,
-        Transaction.type == 'income'
+        Transaction.type == 'Income'
     ).scalar() or 0
 
     # Calculate monthly average (assuming we have data for multiple months)
     monthly_count = db.query(func.count(func.distinct(func.date_trunc('month', Transaction.date)))).filter(
         Transaction.user_id == current_user.id,
-        Transaction.type == 'income'
+        Transaction.type == 'Income'
     ).scalar() or 1
 
     average_income = total_income / monthly_count if monthly_count > 0 else 0
@@ -32,7 +32,7 @@ def get_income_overview(db: Session = Depends(get_db), current_user: User = Depe
         func.sum(Transaction.amount).label('amount')
     ).filter(
         Transaction.user_id == current_user.id,
-        Transaction.type == 'income'
+        Transaction.type == 'Income'
     ).group_by(func.date_trunc('month', Transaction.date)).order_by(func.date_trunc('month', Transaction.date)).all()
 
     # Category breakdown
@@ -41,7 +41,7 @@ def get_income_overview(db: Session = Depends(get_db), current_user: User = Depe
         func.sum(Transaction.amount).label('amount')
     ).filter(
         Transaction.user_id == current_user.id,
-        Transaction.type == 'income'
+        Transaction.type == 'Income'
     ).group_by(Transaction.category).all()
 
     # Calculate percentages

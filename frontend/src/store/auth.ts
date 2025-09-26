@@ -90,13 +90,23 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        localStorage.removeItem('access_token');
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('access_token');
+        }
         set({ user: null, isAuthenticated: false });
       },
 
       checkAuth: async () => {
+        // Avoid localStorage access on server side
+        if (typeof window === 'undefined') {
+          return;
+        }
+
         const token = localStorage.getItem('access_token');
-        if (!token) return;
+        if (!token) {
+          set({ user: null, isAuthenticated: false });
+          return;
+        }
 
         try {
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/auth/me`, {
@@ -110,10 +120,13 @@ export const useAuthStore = create<AuthState>()(
             const user = await response.json();
             set({ user, isAuthenticated: true });
           } else {
+            // Token is invalid, clear it
             localStorage.removeItem('access_token');
             set({ user: null, isAuthenticated: false });
           }
         } catch (error) {
+          // Network error or other issue, clear auth state
+          console.warn('Auth check failed:', error);
           localStorage.removeItem('access_token');
           set({ user: null, isAuthenticated: false });
         }
