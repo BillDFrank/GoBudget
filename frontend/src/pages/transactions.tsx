@@ -3,7 +3,7 @@ import { FilterPanel, SortableHeader, type FilterDef, type SortConfig } from '..
 import AdminLayout from '../layout/AdminLayout';
 import { transactionApi, categoriesApi, personsApi } from '../lib/api';
 // Transaction types (these remain static)
-const DEFAULT_TRANSACTION_TYPES = ['Income', 'Expense', 'Investment', 'Saving'];
+const DEFAULT_TRANSACTION_TYPES = ['Income', 'Expense', 'Investment', 'Savings'];
 
 interface Transaction {
   id: number;
@@ -391,7 +391,7 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
                 <h4 className="font-medium text-blue-900 mb-2">CSV Format Requirements:</h4>
                 <ul className="text-sm text-blue-800 space-y-1">
                   <li>• <strong>date</strong>: Date in YYYY-MM-DD format (required)</li>
-                  <li>• <strong>type</strong>: Income, Expense, or Transfer (required)</li>
+                  <li>• <strong>type</strong>: Income, Expense, Investment, or Savings (required)</li>
                   <li>• <strong>person</strong>: Person/entity name (optional, defaults to "Family")</li>
                   <li>• <strong>category</strong>: Transaction category (required)</li>
                   <li>• <strong>description</strong>: Transaction description (required)</li>
@@ -622,7 +622,8 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
                   >
                     <option value="Income">Income</option>
                     <option value="Expense">Expense</option>
-                    <option value="Transfer">Transfer</option>
+                    <option value="Investment">Investment</option>
+                    <option value="Savings">Savings</option>
                   </select>
                 </div>
 

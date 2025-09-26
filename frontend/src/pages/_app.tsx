@@ -1,6 +1,6 @@
 import '../styles/globals.css'
 import type { AppProps } from 'next/app'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -18,24 +18,53 @@ const queryClient = new QueryClient({
 })
 
 function AuthWrapper({ children }: { children: React.ReactNode }) {
-  const { checkAuth, isAuthenticated } = useAuthStore()
+  const { checkAuth, isAuthenticated, isLoading } = useAuthStore()
   const router = useRouter()
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+    const initAuth = async () => {
+      try {
+        await checkAuth()
+      } catch (error) {
+        console.error('Auth check failed:', error)
+      } finally {
+        setIsInitialized(true)
+      }
+    }
+    
+    if (!isInitialized) {
+      initAuth()
+    }
+  }, [checkAuth, isInitialized])
 
   useEffect(() => {
+    // Don't redirect until auth is initialized
+    if (!isInitialized || isLoading) return
+
     // Redirect logic
     const publicPaths = ['/', '/login', '/register']
     const isPublicPath = publicPaths.includes(router.pathname)
 
     if (!isAuthenticated && !isPublicPath) {
-      router.push('/login')
+      // Only redirect if not already on login page
+      if (router.pathname !== '/login') {
+        router.push('/login')
+      }
     } else if (isAuthenticated && (router.pathname === '/login' || router.pathname === '/register')) {
+      // Redirect authenticated users away from login/register pages
       router.push('/dashboard')
     }
-  }, [isAuthenticated, router])
+  }, [isAuthenticated, router, isInitialized, isLoading])
+
+  // Show loading while checking authentication
+  if (!isInitialized || isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+    )
+  }
 
   return (
     <SettingsProvider>

@@ -7,18 +7,19 @@ from ..models import User, Transaction
 
 router = APIRouter()
 
+
 @router.get("/income-overview/")
 def get_income_overview(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Calculate total income
     total_income = db.query(func.sum(Transaction.amount)).filter(
         Transaction.user_id == current_user.id,
-        Transaction.type == 'income'
+        Transaction.type == 'Income'
     ).scalar() or 0
 
     # Calculate monthly average (assuming we have data for multiple months)
     monthly_count = db.query(func.count(func.distinct(func.date_trunc('month', Transaction.date)))).filter(
         Transaction.user_id == current_user.id,
-        Transaction.type == 'income'
+        Transaction.type == 'Income'
     ).scalar() or 1
 
     average_income = total_income / monthly_count if monthly_count > 0 else 0
@@ -29,7 +30,7 @@ def get_income_overview(db: Session = Depends(get_db), current_user: User = Depe
         func.sum(Transaction.amount).label('amount')
     ).filter(
         Transaction.user_id == current_user.id,
-        Transaction.type == 'income'
+        Transaction.type == 'Income'
     ).group_by(func.date_trunc('month', Transaction.date)).order_by(func.date_trunc('month', Transaction.date)).all()
 
     # Category breakdown
@@ -38,7 +39,7 @@ def get_income_overview(db: Session = Depends(get_db), current_user: User = Depe
         func.sum(Transaction.amount).label('amount')
     ).filter(
         Transaction.user_id == current_user.id,
-        Transaction.type == 'income'
+        Transaction.type == 'Income'
     ).group_by(Transaction.category).all()
 
     # Calculate percentages
@@ -58,23 +59,31 @@ def get_income_overview(db: Session = Depends(get_db), current_user: User = Depe
         'category_breakdown': category_breakdown
     }
 
+
 @router.get("/")
 def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # KPIs
-    income = db.query(func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'income').scalar() or 0
-    expenses = db.query(func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'expense').scalar() or 0
-    savings = db.query(func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'savings').scalar() or 0
-    investments = db.query(func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'investment').scalar() or 0
+    income = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id, Transaction.type == 'Income').scalar() or 0
+    expenses = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id, Transaction.type == 'Expense').scalar() or 0
+    savings = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id, Transaction.type == 'Savings').scalar() or 0
+    investments = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id, Transaction.type == 'Investment').scalar() or 0
     net_flow = income - expenses
 
     # For simplicity, no variance calculation yet
 
     # Charts
-    income_by_category = db.query(Transaction.category, func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'income').group_by(Transaction.category).all()
-    expenses_by_category = db.query(Transaction.category, func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'expense').group_by(Transaction.category).all()
+    income_by_category = db.query(Transaction.category, func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id, Transaction.type == 'Income').group_by(Transaction.category).all()
+    expenses_by_category = db.query(Transaction.category, func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id, Transaction.type == 'Expense').group_by(Transaction.category).all()
 
     # For line chart, group by month
-    net_flow_trend = db.query(func.date_trunc('month', Transaction.date), func.sum(Transaction.amount).label('net')).filter(Transaction.user_id == current_user.id).group_by(func.date_trunc('month', Transaction.date)).all()
+    net_flow_trend = db.query(func.date_trunc('month', Transaction.date), func.sum(Transaction.amount).label(
+        'net')).filter(Transaction.user_id == current_user.id).group_by(func.date_trunc('month', Transaction.date)).all()
 
     return {
         "kpis": {
