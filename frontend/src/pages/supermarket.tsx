@@ -89,7 +89,9 @@ export default function Supermarket() {
   const [selectedReceipts, setSelectedReceipts] = useState<number[]>([]);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [showReceiptDetails, setShowReceiptDetails] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -185,7 +187,7 @@ export default function Supermarket() {
       setCurrentPage(1);
       loadData(1);
     }
-  }, [isAuthenticated, router, selectedMonth]);
+  }, [isAuthenticated, router, selectedYear, selectedMonth]);
 
   useEffect(() => {
     console.log('Supermarket useEffect - outlook_connected check:', {
@@ -200,6 +202,65 @@ export default function Supermarket() {
       syncOutlookEmails();
     }
   }, [isAuthenticated, router.query]);
+
+  // Month navigation functions
+  const goToPreviousMonth = () => {
+    if (selectedMonth === 1) {
+      setSelectedMonth(12);
+      setSelectedYear(selectedYear - 1);
+    } else {
+      setSelectedMonth(selectedMonth - 1);
+    }
+  };
+
+  const goToNextMonth = () => {
+    if (selectedMonth === 12) {
+      setSelectedMonth(1);
+      setSelectedYear(selectedYear + 1);
+    } else {
+      setSelectedMonth(selectedMonth + 1);
+    }
+  };
+
+  const goToCurrentMonth = () => {
+    const now = new Date();
+    setSelectedYear(now.getFullYear());
+    setSelectedMonth(now.getMonth() + 1);
+  };
+
+  // Month picker functions
+  const toggleMonthPicker = () => {
+    setShowMonthPicker(!showMonthPicker);
+  };
+
+  const selectMonth = (month: number, year: number) => {
+    setSelectedMonth(month);
+    setSelectedYear(year);
+    setShowMonthPicker(false);
+  };
+
+  // Generate years for picker (current year ± 5 years)
+  const currentYear = new Date().getFullYear();
+  const availableYears = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
+  
+  // Month names
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const getShortMonthName = (month: number) => {
+    return new Date(2024, month - 1).toLocaleDateString('en-US', {
+      month: 'short'
+    });
+  };
+
+  const getMonthName = (month: number, year: number) => {
+    return new Date(year, month - 1).toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric'
+    });
+  };
 
   useEffect(() => {
     if (loading) {
@@ -286,10 +347,9 @@ export default function Supermarket() {
       });
       setCurrentPage(page);
 
-      const [year, month] = selectedMonth.split('-');
-      console.log(`Loading summary for ${year}-${month}`);
+      console.log(`Loading summary for ${selectedYear}-${selectedMonth}`);
       
-      const summaryResponse = await fetch(`${API_BASE_URL}/receipts/summary?year=${year}&month=${parseInt(month)}`, {
+      const summaryResponse = await fetch(`${API_BASE_URL}/receipts/summary?year=${selectedYear}&month=${selectedMonth}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -1047,19 +1107,119 @@ export default function Supermarket() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">Spending Overview</h3>
-                <p className="text-sm text-gray-600">View your grocery expenses by month</p>
+                <p className="text-sm text-gray-600">
+                  {getMonthName(selectedMonth, selectedYear)}
+                </p>
               </div>
-              <div className="flex items-center gap-3">
-                <label htmlFor="month-select" className="text-sm font-medium text-gray-700">
-                  Month:
-                </label>
-                <input
-                  id="month-select"
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
-                />
+              
+              {/* Custom Month/Year Navigator */}
+              <div className="flex items-center gap-3 relative">
+                <div className="flex items-center bg-gray-50 rounded-lg p-1">
+                  {/* Previous Month Button */}
+                  <button
+                    onClick={goToPreviousMonth}
+                    className="p-2 hover:bg-white rounded-md transition-colors text-gray-600 hover:text-gray-900"
+                    title="Previous Month"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  
+                  {/* Current Month/Year Display - Clickable */}
+                  <button
+                    onClick={toggleMonthPicker}
+                    className="px-4 py-2 bg-white rounded-md shadow-sm border min-w-[140px] text-center hover:bg-gray-50 transition-colors group"
+                    title="Click to select month"
+                  >
+                    <div className="font-medium text-gray-900 flex items-center justify-center gap-1">
+                      {getShortMonthName(selectedMonth)} {selectedYear}
+                      <svg 
+                        className={`w-3 h-3 text-gray-500 transition-transform ${showMonthPicker ? 'rotate-180' : ''}`} 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </button>
+                  
+                  {/* Next Month Button */}
+                  <button
+                    onClick={goToNextMonth}
+                    className="p-2 hover:bg-white rounded-md transition-colors text-gray-600 hover:text-gray-900"
+                    title="Next Month"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Month Picker Dropdown */}
+                {showMonthPicker && (
+                  <>
+                    {/* Backdrop */}
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setShowMonthPicker(false)}
+                    />
+                    
+                    {/* Dropdown */}
+                    <div className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-4 min-w-[320px]">
+                      <div className="mb-3">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Select Year</label>
+                        <select
+                          value={selectedYear}
+                          onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        >
+                          {availableYears.map(year => (
+                            <option key={year} value={year}>{year}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Select Month</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {monthNames.map((monthName, index) => (
+                            <button
+                              key={index}
+                              onClick={() => selectMonth(index + 1, selectedYear)}
+                              className={`px-3 py-2 text-sm rounded-md transition-colors ${
+                                selectedMonth === index + 1 
+                                  ? 'bg-green-100 text-green-800 border border-green-300' 
+                                  : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                              }`}
+                            >
+                              {monthName.substring(0, 3)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div className="mt-3 pt-3 border-t border-gray-200 flex justify-end">
+                        <button
+                          onClick={() => setShowMonthPicker(false)}
+                          className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Current Month Button */}
+                <button
+                  onClick={goToCurrentMonth}
+                  className="px-3 py-2 text-sm font-medium text-green-600 bg-green-50 border border-green-200 rounded-md hover:bg-green-100 transition-colors"
+                  title="Go to Current Month"
+                >
+                  Today
+                </button>
               </div>
             </div>
           </div>
@@ -1071,7 +1231,7 @@ export default function Supermarket() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  {new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} Total
+                  {getMonthName(selectedMonth, selectedYear)} Total
                 </p>
                 <p className="text-2xl font-bold text-green-600">
                   {spendingSummary ? formatCurrency(spendingSummary.total_spent) : '€0,00'}
