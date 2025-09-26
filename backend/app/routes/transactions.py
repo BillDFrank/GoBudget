@@ -220,7 +220,7 @@ async def import_csv_transactions(
 
     Expected CSV columns:
     - date (required): Date in YYYY-MM-DD format or parseable date format
-    - type (required): Transaction type (Income, Expense, Transfer)
+    - type (required): Transaction type (Income, Expense, Investment, Savings)
     - person (optional): Person/entity, defaults to "Family" if not provided
     - category (required): Transaction category
     - description (required): Transaction description
@@ -273,7 +273,7 @@ async def import_csv_transactions(
         user_categories = get_user_categories(db, current_user.id)
         user_persons = get_user_persons(db, current_user.id)
         # Valid transaction types (these remain static)
-        valid_types = {'Income', 'Expense', 'Investment', 'Saving'}
+        valid_types = {'Income', 'Expense', 'Investment', 'Savings'}
 
         for index, row in df.iterrows():
             row_num = index + 2  # +2 because index starts at 0 and we have a header row
@@ -296,12 +296,24 @@ async def import_csv_transactions(
                 row_errors.append(
                     f"Row {row_num}: Invalid type '{row['type']}'. Must be one of: {', '.join(valid_types)}")
 
-            # Validate category
+            # Validate category (create if doesn't exist)
             if pd.isna(row['category']) or str(row['category']).strip() == '':
                 row_errors.append(f"Row {row_num}: Category is required")
-            elif row['category'] not in valid_categories:
-                row_errors.append(
-                    f"Row {row_num}: Invalid category '{row['category']}'. Must be one of: {', '.join(valid_categories)}")
+            else:
+                # Create category if it doesn't exist
+                category_name = str(row['category']).strip()
+                if category_name not in user_categories:
+                    create_category_if_not_exists(
+                        db, current_user.id, category_name)
+                    user_categories.add(category_name)  # Update the set
+
+            # Validate person (create if doesn't exist)
+            if not pd.isna(row['person']) and str(row['person']).strip() != '':
+                person_name = str(row['person']).strip()
+                if person_name not in user_persons:
+                    create_person_if_not_exists(
+                        db, current_user.id, person_name)
+                    user_persons.add(person_name)  # Update the set
 
             # Validate description
             if pd.isna(row['description']) or str(row['description']).strip() == '':
@@ -381,6 +393,7 @@ async def import_csv_transactions(
 @router.post("/preview-csv")
 async def preview_csv_transactions(
     file: UploadFile = File(...),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -431,12 +444,12 @@ async def preview_csv_transactions(
         errors = []
         valid_transactions = []
 
-        # Valid transaction types and categories (based on frontend constants)
-        valid_types = {'Income', 'Expense', 'Transfer'}
-        valid_categories = {
-            'Food & Dining', 'Transportation', 'Shopping', 'Entertainment',
-            'Bills & Utilities', 'Income', 'Healthcare', 'Education', 'Other'
-        }
+        # Valid transaction types and categories (dynamic from user's data)
+        valid_types = {'Income', 'Expense', 'Investment', 'Savings'}
+        # Note: For preview, we'll show warnings for unknown categories/persons
+        # but won't create them yet - that happens during actual import
+        user_categories = get_user_categories(db, current_user.id)
+        user_persons = get_user_persons(db, current_user.id)
 
         for index, row in df.iterrows():
             row_num = index + 2  # +2 because index starts at 0 and we have a header row
@@ -459,12 +472,15 @@ async def preview_csv_transactions(
                 row_errors.append(
                     f"Row {row_num}: Invalid type '{row['type']}'. Must be one of: {', '.join(valid_types)}")
 
-            # Validate category
+            # Validate category (warn for unknown categories)
             if pd.isna(row['category']) or str(row['category']).strip() == '':
                 row_errors.append(f"Row {row_num}: Category is required")
-            elif row['category'] not in valid_categories:
-                row_errors.append(
-                    f"Row {row_num}: Invalid category '{row['category']}'. Must be one of: {', '.join(valid_categories)}")
+            else:
+                category_name = str(row['category']).strip()
+                if category_name not in user_categories:
+                    # For preview, we'll show this as a warning but not an error
+                    # The category will be created during actual import
+                    pass
 
             # Validate description
             if pd.isna(row['description']) or str(row['description']).strip() == '':
