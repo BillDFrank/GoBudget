@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from ..database import get_db
 from .auth import get_current_user
 from ..models import User, Transaction
+from datetime import datetime
+from typing import Optional
 
 router = APIRouter()
+
 
 @router.get("/income-overview/")
 def get_income_overview(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -58,35 +61,91 @@ def get_income_overview(db: Session = Depends(get_db), current_user: User = Depe
         'category_breakdown': category_breakdown
     }
 
+
 @router.get("/")
-def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # KPIs
-    income = db.query(func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'income').scalar() or 0
-    expenses = db.query(func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'expense').scalar() or 0
-    savings = db.query(func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'savings').scalar() or 0
-    investments = db.query(func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'investment').scalar() or 0
-    net_flow = income - expenses
+def get_dashboard(
+    year: int = Query(default=None, description="Year for dashboard data"),
+    month: int = Query(default=None, description="Month for dashboard data"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get dashboard data for a specific month/year or current month if not specified.
 
-    # For simplicity, no variance calculation yet
+    Returns:
+    - KPIs: Monthly sums for Income, Expense, Investment, Savings
+    - Charts: Income by description and Expenses by category pie charts
+    """
+    # Default to current month/year if not provided
+    current_date = datetime.now()
+    target_year = year or current_date.year
+    target_month = month or current_date.month
 
-    # Charts
-    income_by_category = db.query(Transaction.category, func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'income').group_by(Transaction.category).all()
-    expenses_by_category = db.query(Transaction.category, func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id, Transaction.type == 'expense').group_by(Transaction.category).all()
+    # Base filter for the selected month and user
+    base_filter = [
+        Transaction.user_id == current_user.id,
+        extract('year', Transaction.date) == target_year,
+        extract('month', Transaction.date) == target_month
+    ]
 
-    # For line chart, group by month
-    net_flow_trend = db.query(func.date_trunc('month', Transaction.date), func.sum(Transaction.amount).label('net')).filter(Transaction.user_id == current_user.id).group_by(func.date_trunc('month', Transaction.date)).all()
+    # KPIs - Monthly sums by transaction type
+    income = db.query(func.sum(Transaction.amount)).filter(
+        *base_filter,
+        Transaction.type == 'Income'
+    ).scalar() or 0
+
+    expenses = db.query(func.sum(Transaction.amount)).filter(
+        *base_filter,
+        Transaction.type == 'Expense'
+    ).scalar() or 0
+
+    investments = db.query(func.sum(Transaction.amount)).filter(
+        *base_filter,
+        Transaction.type == 'Investment'
+    ).scalar() or 0
+
+    savings = db.query(func.sum(Transaction.amount)).filter(
+        *base_filter,
+        Transaction.type == 'Savings'
+    ).scalar() or 0
+
+    # Chart data
+    # Income by description (for pie chart)
+    income_by_description = db.query(
+        Transaction.description,
+        func.sum(Transaction.amount).label('amount')
+    ).filter(
+        *base_filter,
+        Transaction.type == 'Income'
+    ).group_by(Transaction.description).all()
+
+    # Expenses by category (for pie chart)
+    expenses_by_category = db.query(
+        Transaction.category,
+        func.sum(Transaction.amount).label('amount')
+    ).filter(
+        *base_filter,
+        Transaction.type == 'Expense'
+    ).group_by(Transaction.category).all()
 
     return {
+        "month": target_month,
+        "year": target_year,
         "kpis": {
-            "income": income,
-            "expenses": expenses,
-            "savings": savings,
-            "investments": investments,
-            "net_flow": net_flow
+            "income": float(income),
+            # Make expenses positive for display
+            "expenses": float(abs(expenses)),
+            "investments": float(investments),
+            "savings": float(savings)
         },
         "charts": {
-            "income_by_category": [{"category": cat, "amount": amt} for cat, amt in income_by_category],
-            "expenses_by_category": [{"category": cat, "amount": amt} for cat, amt in expenses_by_category],
-            "net_flow_trend": [{"month": str(month), "net": net} for month, net in net_flow_trend]
+            "income_by_description": [
+                {"id": desc, "label": desc, "value": float(amount)}
+                for desc, amount in income_by_description
+            ],
+            "expenses_by_category": [
+                {"id": cat, "label": cat, "value": float(abs(amount))}
+                for cat, amount in expenses_by_category
+            ]
         }
     }

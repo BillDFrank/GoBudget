@@ -118,3 +118,13 @@ export const settingsApi = {
   update: (data: any) => api.put('/settings/', data),
   reset: () => api.post('/settings/reset'),
 };
+
+// Dashboard API functions
+export const dashboardApi = {
+  get: (year?: number, month?: number) => {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (month) params.append('month', month.toString());
+    return api.get(`/dashboard/${params.toString() ? `?${params.toString()}` : ''}`);
+  },
+};
