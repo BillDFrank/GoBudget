@@ -130,4 +130,7 @@ export const dashboardApi = {
   getIncomeData: (startMonths?: number) => api.get('/dashboard/income/', { 
     params: { start_months: startMonths || 12 } 
   }),
+  getExpensesData: (startMonths?: number) => api.get('/dashboard/expenses/', { 
+    params: { start_months: startMonths || 12 } 
+  }),
 };
