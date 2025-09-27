@@ -127,4 +127,7 @@ export const dashboardApi = {
     if (month) params.append('month', month.toString());
     return api.get(`/dashboard/${params.toString() ? `?${params.toString()}` : ''}`);
   },
+  getIncomeData: (startMonths?: number) => api.get('/dashboard/income/', { 
+    params: { start_months: startMonths || 12 } 
+  }),
 };

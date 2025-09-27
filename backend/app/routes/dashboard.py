@@ -5,9 +5,146 @@ from ..database import get_db
 from .auth import get_current_user
 from ..models import User, Transaction
 from datetime import datetime
-from typing import Optional
+from dateutil.relativedelta import relativedelta
 
 router = APIRouter()
+
+
+@router.get("/income/")
+def get_income_data(
+    start_months: int = Query(
+        default=12,
+        description="Number of months to look back from current month"
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get income data for the income page.
+
+    Returns:
+    - This month's total income
+    - Last month's total income
+    - Average monthly income (trailing specified months)
+    - Bar chart data: monthly income totals and subtotals by description
+    """
+    print(f"DEBUG: Received start_months parameter: {start_months}")
+
+    current_date = datetime.now()
+    current_month = current_date.month
+    current_year = current_date.year
+
+    # Calculate last month (handle year boundary)
+    if current_month == 1:
+        last_month = 12
+        last_year = current_year - 1
+    else:
+        last_month = current_month - 1
+        last_year = current_year
+
+    # This month's total income
+    this_month_income = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Income',
+        extract('year', Transaction.date) == current_year,
+        extract('month', Transaction.date) == current_month
+    ).scalar() or 0
+
+    # Last month's total income
+    last_month_income = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Income',
+        extract('year', Transaction.date) == last_year,
+        extract('month', Transaction.date) == last_month
+    ).scalar() or 0
+
+    # Average monthly income (trailing specified months)
+    months_ago = current_date - relativedelta(months=start_months)
+    print(f"DEBUG: Looking back to: {months_ago}")
+
+    # Get total income for the period
+    total_income_period = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Income',
+        Transaction.date >= months_ago
+    ).scalar() or 0
+
+    # Count actual months with data (not just selected months)
+    actual_months_with_data = db.query(
+        func.count(func.distinct(
+            func.concat(
+                extract('year', Transaction.date),
+                '-',
+                extract('month', Transaction.date)
+            )
+        ))
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Income',
+        Transaction.date >= months_ago
+    ).scalar() or 1
+
+    print(f"DEBUG: Total income in period: {total_income_period}")
+    print(f"DEBUG: Actual months with data: {actual_months_with_data}")
+
+    average_monthly_income = total_income_period / actual_months_with_data
+
+    # Bar chart data: Monthly income with subtotals by description
+    # Get specified months of data
+    monthly_data = db.query(
+        extract('year', Transaction.date).label('year'),
+        extract('month', Transaction.date).label('month'),
+        Transaction.description,
+        func.sum(Transaction.amount).label('amount')
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Income',
+        Transaction.date >= months_ago
+    ).group_by(
+        extract('year', Transaction.date),
+        extract('month', Transaction.date),
+        Transaction.description
+    ).order_by(
+        extract('year', Transaction.date),
+        extract('month', Transaction.date)
+    ).all()
+
+    print(f"DEBUG: Found {len(monthly_data)} monthly data records")
+
+    # Process data for bar chart format
+    chart_data = {}
+    descriptions_set = set()
+
+    for year, month, description, amount in monthly_data:
+        month_key = f"{int(year)}-{int(month):02d}"
+        if month_key not in chart_data:
+            chart_data[month_key] = {
+                'month': month_key,
+                'total': 0
+            }
+
+        chart_data[month_key][description or 'Other'] = float(amount)
+        chart_data[month_key]['total'] += float(amount)
+        descriptions_set.add(description or 'Other')
+
+    # Convert to list format for frontend
+    chart_data_list = list(chart_data.values())
+    descriptions_list = list(descriptions_set)
+
+    print(f"DEBUG: Generated {len(chart_data_list)} chart data points")
+    print(f"DEBUG: Descriptions: {descriptions_list}")
+
+    return {
+        'cards': {
+            'this_month': float(this_month_income),
+            'last_month': float(last_month_income),
+            'average_monthly': float(average_monthly_income)
+        },
+        'bar_chart': {
+            'data': chart_data_list,
+            'keys': descriptions_list
+        }
+    }
 
 
 @router.get("/income-overview/")
