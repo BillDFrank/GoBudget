@@ -29,7 +29,7 @@ def get_income_data(
     - Bar chart data: monthly income totals and subtotals by description
     """
     print(f"DEBUG: Received start_months parameter: {start_months}")
-    
+
     current_date = datetime.now()
     current_month = current_date.month
     current_year = current_date.year
