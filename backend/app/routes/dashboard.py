@@ -251,7 +251,6 @@ def get_expenses_data(
 
     # Average monthly expenses (trailing specified months)
     months_ago = current_date - relativedelta(months=start_months)
-    print(f"DEBUG: Looking back to: {months_ago}")
 
     # Get total expenses for the period
     total_expenses_period = db.query(func.sum(Transaction.amount)).filter(
@@ -274,9 +273,6 @@ def get_expenses_data(
         Transaction.type == 'Expense',
         Transaction.date >= months_ago
     ).scalar() or 1
-
-    print(f"DEBUG: Total expenses in period: {total_expenses_period}")
-    print(f"DEBUG: Actual months with data: {actual_months_with_data}")
 
     average_monthly_expenses = (
         abs(float(total_expenses_period)) / actual_months_with_data
@@ -326,9 +322,6 @@ def get_expenses_data(
         extract('month', Transaction.date)
     ).all()
 
-    print(f"DEBUG: Found {len(monthly_category_data)} monthly category "
-          f"data records")
-
     # Process data for bar chart format
     chart_data = {}
     categories_set = set()
@@ -349,9 +342,6 @@ def get_expenses_data(
     # Convert to list format for frontend
     chart_data_list = list(chart_data.values())
     categories_list = list(categories_set)
-
-    print(f"DEBUG: Generated {len(chart_data_list)} chart data points")
-    print(f"DEBUG: Categories: {categories_list}")
 
     return {
         'cards': {
