@@ -218,7 +218,6 @@ def get_expenses_data(
     - Line chart data: monthly expense totals
     - Bar chart data: monthly expenses by categories
     """
-    print(f"DEBUG: Received start_months parameter: {start_months}")
 
     current_date = datetime.now()
     current_month = current_date.month

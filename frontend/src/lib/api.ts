@@ -30,15 +30,6 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   const fullUrl = `${config.baseURL}${config.url}`;
   
-  console.log('=== API REQUEST DEBUG ===');
-  console.log('Method:', config.method?.toUpperCase());
-  console.log('URL:', config.url);
-  console.log('Base URL:', config.baseURL);
-  console.log('Full URL:', fullUrl);
-  console.log('Token available:', !!token);
-  console.log('Token preview:', token ? token.substring(0, 20) + '...' : 'No token');
-  console.log('Headers:', config.headers);
-  
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
