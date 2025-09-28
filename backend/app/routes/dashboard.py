@@ -199,6 +199,166 @@ def get_income_overview(db: Session = Depends(get_db), current_user: User = Depe
     }
 
 
+@router.get("/expenses/")
+def get_expenses_data(
+    start_months: int = Query(
+        default=12,
+        description="Number of months to look back from current month"
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get expenses data for the expenses page.
+
+    Returns:
+    - This month's total expenses
+    - Last month's total expenses
+    - Average monthly expenses (trailing specified months)
+    - Line chart data: monthly expense totals
+    - Bar chart data: monthly expenses by categories
+    """
+
+    current_date = datetime.now()
+    current_month = current_date.month
+    current_year = current_date.year
+
+    # Calculate last month (handle year boundary)
+    if current_month == 1:
+        last_month = 12
+        last_year = current_year - 1
+    else:
+        last_month = current_month - 1
+        last_year = current_year
+
+    # This month's total expenses (make positive for display)
+    this_month_expenses = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Expense',
+        extract('year', Transaction.date) == current_year,
+        extract('month', Transaction.date) == current_month
+    ).scalar() or 0
+    this_month_expenses = abs(float(this_month_expenses))
+
+    # Last month's total expenses (make positive for display)
+    last_month_expenses = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Expense',
+        extract('year', Transaction.date) == last_year,
+        extract('month', Transaction.date) == last_month
+    ).scalar() or 0
+    last_month_expenses = abs(float(last_month_expenses))
+
+    # Average monthly expenses (trailing specified months)
+    months_ago = current_date - relativedelta(months=start_months)
+
+    # Get total expenses for the period
+    total_expenses_period = db.query(func.sum(Transaction.amount)).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Expense',
+        Transaction.date >= months_ago
+    ).scalar() or 0
+
+    # Count actual months with data (not just selected months)
+    actual_months_with_data = db.query(
+        func.count(func.distinct(
+            func.concat(
+                extract('year', Transaction.date),
+                '-',
+                extract('month', Transaction.date)
+            )
+        ))
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Expense',
+        Transaction.date >= months_ago
+    ).scalar() or 1
+
+    average_monthly_expenses = (
+        abs(float(total_expenses_period)) / actual_months_with_data
+    )
+
+    # Line chart data: Monthly total expenses
+    monthly_totals = db.query(
+        extract('year', Transaction.date).label('year'),
+        extract('month', Transaction.date).label('month'),
+        func.sum(Transaction.amount).label('total_amount')
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Expense',
+        Transaction.date >= months_ago
+    ).group_by(
+        extract('year', Transaction.date),
+        extract('month', Transaction.date)
+    ).order_by(
+        extract('year', Transaction.date),
+        extract('month', Transaction.date)
+    ).all()
+
+    line_chart_data = [
+        {
+            'month': f"{int(year)}-{int(month):02d}",
+            'total': abs(float(total_amount))
+        }
+        for year, month, total_amount in monthly_totals
+    ]
+
+    # Bar chart data: Monthly expenses with subtotals by category
+    monthly_category_data = db.query(
+        extract('year', Transaction.date).label('year'),
+        extract('month', Transaction.date).label('month'),
+        Transaction.category,
+        func.sum(Transaction.amount).label('amount')
+    ).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.type == 'Expense',
+        Transaction.date >= months_ago
+    ).group_by(
+        extract('year', Transaction.date),
+        extract('month', Transaction.date),
+        Transaction.category
+    ).order_by(
+        extract('year', Transaction.date),
+        extract('month', Transaction.date)
+    ).all()
+
+    # Process data for bar chart format
+    chart_data = {}
+    categories_set = set()
+
+    for year, month, category, amount in monthly_category_data:
+        month_key = f"{int(year)}-{int(month):02d}"
+        if month_key not in chart_data:
+            chart_data[month_key] = {
+                'month': month_key,
+                'total': 0
+            }
+
+        category_name = category or 'Other'
+        chart_data[month_key][category_name] = abs(float(amount))
+        chart_data[month_key]['total'] += abs(float(amount))
+        categories_set.add(category_name)
+
+    # Convert to list format for frontend
+    chart_data_list = list(chart_data.values())
+    categories_list = list(categories_set)
+
+    return {
+        'cards': {
+            'this_month': this_month_expenses,
+            'last_month': last_month_expenses,
+            'average_monthly': average_monthly_expenses
+        },
+        'line_chart': {
+            'data': line_chart_data
+        },
+        'bar_chart': {
+            'data': chart_data_list,
+            'keys': categories_list
+        }
+    }
+
+
 @router.get("/")
 def get_dashboard(
     year: int = Query(default=None, description="Year for dashboard data"),
@@ -207,7 +367,8 @@ def get_dashboard(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get dashboard data for a specific month/year or current month if not specified.
+    Get dashboard data for a specific month/year or current month if not
+    specified.
 
     Returns:
     - KPIs: Monthly sums for Income, Expense, Investment, Savings
