@@ -13,8 +13,15 @@ export default function Settings() {
   const [outlookStatus, setOutlookStatus] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState('');
-  const [showCodeInput, setShowCodeInput] = useState(false);
-  const [authCode, setAuthCode] = useState('');
+  const [deviceCodeInfo, setDeviceCodeInfo] = useState<{
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    expires_in: number;
+    interval: number;
+    message: string;
+  } | null>(null);
+  const [polling, setPolling] = useState(false);
   
   const [categories, setCategories] = useState([]);
   const [persons, setPersons] = useState([]);
@@ -43,7 +50,7 @@ export default function Settings() {
       // Clean up URL
       router.replace('/settings', undefined, { shallow: true });
     }
-  }, [router.query]);
+  }, [router.query, outlookConnected]);
 
   // Clear message after 5 seconds
   useEffect(() => {
@@ -112,53 +119,66 @@ export default function Settings() {
 
   const connectOutlook = async () => {
     try {
-      const response = await outlookApi.getAuthUrl();
-      const authUrl = response.data.auth_url;
-      
-      // Store state for later verification
-      sessionStorage.setItem('outlook_oauth_state', response.data.state);
-      
-      // Open OAuth in a new tab
-      window.open(authUrl, '_blank');
-      
-      // Show instructions to the user
-      setMessage('Please complete the OAuth process in the new tab. After authorizing, copy the authorization code from the URL and paste it below.');
-      setShowCodeInput(true);
-      
-    } catch (error) {
-      console.error('Failed to get auth URL:', error);
-      setMessage('Failed to initiate Outlook connection. Please try again.');
-    }
-  };
+      setMessage('Initiating Outlook authorization...');
 
-  const handleManualCodeSubmit = async () => {
-    try {
-      const state = sessionStorage.getItem('outlook_oauth_state');
-      if (!state) {
-        setMessage('OAuth state not found. Please restart the connection process.');
-        return;
-      }
-      
-      if (!authCode.trim()) {
-        setMessage('Please enter the authorization code.');
-        return;
-      }
-      
-      // Extract code from URL if user pasted the full URL
-      let code = authCode.trim();
-      if (code.includes('code=')) {
-        const urlParams = new URLSearchParams(code.split('?')[1] || code);
-        code = urlParams.get('code') || code;
-      }
-      
-      await handleOutlookCallback(code, state);
-      setShowCodeInput(false);
-      setAuthCode('');
-      sessionStorage.removeItem('outlook_oauth_state');
-      
+      // Get device code for authorization
+      const response = await outlookApi.getAuthUrl();
+
+      const deviceInfo = response.data;
+      setDeviceCodeInfo(deviceInfo);
+      setMessage(`Please visit ${deviceInfo.verification_uri} and enter code: ${deviceInfo.user_code}`);
+
+      // Start polling for authorization completion
+      setPolling(true);
+      const pollInterval = setInterval(async () => {
+        try {
+          const pollResponse = await outlookApi.pollAuth();
+
+          if (pollResponse.data.success) {
+            // Authorization completed successfully
+            clearInterval(pollInterval);
+            setPolling(false);
+            setDeviceCodeInfo(null);
+            setMessage('Outlook connected successfully!');
+            setOutlookConnected(true);
+            await checkOutlookStatus();
+          }
+          // If still pending, continue polling
+        } catch (pollError: any) {
+          if (pollError.response?.status === 400) {
+            const errorData = pollError.response.data;
+            if (errorData.detail?.includes('declined') ||
+                errorData.detail?.includes('expired') ||
+                errorData.detail?.includes('failed')) {
+              // Authorization failed or was declined
+              clearInterval(pollInterval);
+              setPolling(false);
+              setDeviceCodeInfo(null);
+              setMessage('Outlook authorization failed. Please try again.');
+            }
+            // If still pending, continue polling
+          } else {
+            // Other error, continue polling
+            console.error('Polling error:', pollError);
+          }
+        }
+      }, deviceInfo.interval * 1000); // Poll at the recommended interval
+
+      // Stop polling after 15 minutes (device codes typically expire in 15 minutes)
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setPolling(false);
+        setDeviceCodeInfo(null);
+        if (!outlookConnected) {
+          setMessage('Authorization timed out. Please try again.');
+        }
+      }, 15 * 60 * 1000);
+
     } catch (error) {
-      console.error('Failed to submit authorization code:', error);
-      setMessage('Failed to process authorization code. Please try again.');
+      console.error('Failed to initiate device flow:', error);
+      setMessage('Failed to initiate Outlook authorization. Please try again.');
+      setDeviceCodeInfo(null);
+      setPolling(false);
     }
   };
 
@@ -718,37 +738,43 @@ export default function Settings() {
                   )}
                 </div>
 
-                {showCodeInput && (
-                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <h4 className="font-medium text-yellow-800 mb-2">Complete Outlook Authorization</h4>
-                    <div className="text-sm text-yellow-700 mb-3">
-                      <p className="mb-2">After authorizing in the new tab, you'll be redirected to a page that starts with:</p>
-                      <code className="bg-yellow-100 px-2 py-1 rounded text-xs">
-                        https://login.microsoftonline.com/common/oauth2/nativeclient?code=...
-                      </code>
-                      <p className="mt-2">Copy the entire URL or just the <strong>code</strong> parameter value and paste it below:</p>
-                    </div>
-                    <div className="flex space-x-2">
-                      <input
-                        type="text"
-                        value={authCode}
-                        onChange={(e) => setAuthCode(e.target.value)}
-                        placeholder="Paste authorization code or full URL here..."
-                        className="flex-1 px-3 py-2 border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                      />
-                      <button
-                        onClick={handleManualCodeSubmit}
-                        className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+                {deviceCodeInfo && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="font-medium text-blue-800 mb-2">Complete Outlook Authorization</h4>
+                    <div className="space-y-3">
+                      <p className="text-sm text-blue-700">
+                        To connect your Outlook account, please visit:
+                      </p>
+                      <a
+                        href={deviceCodeInfo.verification_uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-center w-full"
                       >
-                        Submit
-                      </button>
+                        Open Microsoft Login Page
+                      </a>
+                      <div className="bg-blue-100 p-3 rounded">
+                        <p className="text-sm text-blue-800 mb-1">Enter this code:</p>
+                        <code className="text-lg font-mono bg-white px-3 py-2 rounded border block text-center">
+                          {deviceCodeInfo.user_code}
+                        </code>
+                      </div>
+                      <p className="text-xs text-blue-600">
+                        {polling ? 'Waiting for authorization...' : 'Click the link above and enter the code'}
+                      </p>
+                      {polling && (
+                        <div className="flex items-center space-x-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          <span className="text-sm text-blue-700">Checking authorization status...</span>
+                        </div>
+                      )}
                       <button
                         onClick={() => {
-                          setShowCodeInput(false);
-                          setAuthCode('');
-                          sessionStorage.removeItem('outlook_oauth_state');
+                          setDeviceCodeInfo(null);
+                          setPolling(false);
+                          setMessage('');
                         }}
-                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                        className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
                       >
                         Cancel
                       </button>

@@ -1,10 +1,8 @@
 from msal import PublicClientApplication
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, date
 import os
-import secrets
 import httpx
 import base64
 import logging
@@ -38,13 +36,15 @@ CLIENT_ID = os.getenv("OUTLOOK_CLIENT_ID")
 TENANT_ID = os.getenv("OUTLOOK_TENANT_ID")
 # Not used for public clients
 CLIENT_SECRET = os.getenv("OUTLOOK_CLIENT_SECRET")
-REDIRECT_URI = os.getenv("OUTLOOK_REDIRECT_URI")
 
-# Determine authority based on tenant_id
+# For personal Microsoft accounts, use the native client redirect URI
+# This should be registered in Azure as a redirect URI for the app
 if TENANT_ID and TENANT_ID.lower() == "consumers":
     AUTHORITY = "https://login.microsoftonline.com/consumers"
+    REDIRECT_URI = "https://login.microsoftonline.com/consumers/oauth2/nativeclient"
 else:
     AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+    REDIRECT_URI = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/nativeclient"
 
 SCOPE = ["https://graph.microsoft.com/Mail.Read"]
 
@@ -74,29 +74,100 @@ logger.info(f"Using REDIRECT_URI: {REDIRECT_URI}")
 
 @router.get("/auth-url")
 def get_outlook_auth_url(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Get the URL to authorize Outlook access"""
-    # Clear any existing tokens and state for fresh start
-    current_user.outlook_access_token = None
-    current_user.outlook_refresh_token = None
-    current_user.outlook_token_expires = None
-    current_user.outlook_state = None
-    db.commit()
+    """Get device code for Outlook authorization (no redirect URI needed)"""
+    try:
+        # Clear any existing tokens and state for fresh start
+        current_user.outlook_access_token = None
+        current_user.outlook_refresh_token = None
+        current_user.outlook_token_expires = None
+        current_user.outlook_state = None
+        db.commit()
 
-    # Generate new state
-    state = secrets.token_urlsafe(32)
+        # Use device code flow instead of authorization code flow
+        # This doesn't require a registered redirect URI
+        device_flow = msal_app.initiate_device_flow(SCOPE)
 
-    # Store state in user
-    current_user.outlook_state = state
-    db.commit()
+        if "user_code" not in device_flow:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to initiate device flow"
+            )
 
-    auth_url = msal_app.get_authorization_request_url(
-        SCOPE,
-        state=state,
-        redirect_uri=REDIRECT_URI
-    )
+        # Store the device code info for polling
+        current_user.outlook_state = device_flow["device_code"]
+        db.commit()
 
-    logger.info(f"Generated auth URL for user {current_user.id}: {auth_url}")
-    return {"auth_url": auth_url, "state": state}
+        logger.info(f"Initiated device flow for user {current_user.id}")
+
+        return {
+            "device_code": device_flow["device_code"],
+            "user_code": device_flow["user_code"],
+            "verification_uri": device_flow["verification_uri"],
+            "expires_in": device_flow["expires_in"],
+            "interval": device_flow["interval"],
+            "message": device_flow["message"]
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to initiate device flow: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to initiate authorization: {str(e)}"
+        )
+
+
+@router.post("/auth-poll")
+def poll_outlook_auth(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Poll for device code authorization completion"""
+    try:
+        if not current_user.outlook_state:
+            raise HTTPException(status_code=400, detail="No authorization in progress")
+
+        # Acquire token using device flow
+        result = msal_app.acquire_token_by_device_flow({
+            "device_code": current_user.outlook_state
+        })
+
+        if "access_token" in result:
+            # Success! Store the tokens
+            current_user.outlook_access_token = result["access_token"]
+            current_user.outlook_refresh_token = result.get("refresh_token")
+            expires_in = result.get("expires_in", 3600)
+            current_user.outlook_token_expires = datetime.now() + timedelta(seconds=expires_in)
+            current_user.outlook_state = None  # Clear the device code
+            db.commit()
+
+            logger.info(f"Successfully authorized Outlook for user {current_user.id}")
+            return {"success": True, "message": "Outlook connected successfully"}
+
+        elif "error" in result:
+            error_code = result["error"]
+            if error_code == "authorization_pending":
+                # Still waiting for user to complete authorization
+                return {"success": False, "status": "pending"}
+            elif error_code == "authorization_declined":
+                # User declined authorization
+                current_user.outlook_state = None
+                db.commit()
+                raise HTTPException(status_code=400, detail="Authorization declined by user")
+            elif error_code == "expired_token":
+                # Device code expired
+                current_user.outlook_state = None
+                db.commit()
+                raise HTTPException(status_code=400, detail="Authorization code expired")
+            else:
+                # Other error
+                current_user.outlook_state = None
+                db.commit()
+                raise HTTPException(status_code=400, detail=f"Authorization failed: {error_code}")
+
+        else:
+            # Still pending
+            return {"success": False, "status": "pending"}
+
+    except Exception as e:
+        logger.error(f"Failed to poll authorization: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to check authorization status: {str(e)}")
 
 
 @router.post("/exchange-code")
@@ -157,18 +228,162 @@ async def exchange_authorization_code(
 
 @router.get("/callback")
 def outlook_callback(code: str, state: str, db: Session = Depends(get_db)):
-    """Handle OAuth callback from Microsoft (legacy endpoint, redirects to frontend)"""
+    """Handle OAuth callback from Microsoft"""
     try:
         logger.info(f"Received OAuth callback with code and state: {state}")
 
-        # Redirect to frontend with code and state as query parameters
-        frontend_url = f"http://localhost:3000/settings?code={code}&state={state}&outlook_callback=true"
-        return RedirectResponse(url=frontend_url)
+        # Create an HTML page that will communicate back to the parent window
+        # and then redirect to the frontend
+        callback_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Outlook Authorization</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }}
+        .container {{
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        .spinner {{
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+        }}
+        @keyframes spin {{
+            0% {{ transform: rotate(0deg); }}
+            100% {{ transform: rotate(360deg); }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Authorization Successful</h2>
+        <div class="spinner"></div>
+        <p>Completing connection... This window will close automatically.</p>
+    </div>
+    
+    <script>
+        // Try to communicate with parent window
+        try {{
+            if (window.opener) {{
+                window.opener.postMessage({{
+                    type: 'oauth_callback',
+                    code: '{code}',
+                    state: '{state}'
+                }}, window.opener.location.origin);
+            }}
+        }} catch (e) {{
+            console.log('Could not communicate with parent window:', e);
+        }}
+        
+        // Close window after a short delay
+        setTimeout(() => {{
+            try {{
+                window.close();
+            }} catch (e) {{
+                // If we can't close, redirect to frontend
+                const frontend_base = '{os.getenv("FRONTEND_URL", "http://localhost:3000")}';
+                window.location.href = frontend_base + '/settings?code={code}&state={state}&outlook_callback=true';
+            }}
+        }}, 2000);
+        
+        // Fallback: if window doesn't close, show redirect link
+        setTimeout(() => {{
+            if (!window.closed) {{
+                document.body.innerHTML = `
+                    <div class="container">
+                        <h2>Authorization Complete</h2>
+                        <p>Please <a href="{os.getenv("FRONTEND_URL", "http://localhost:3000")}/settings?code={code}&state={state}&outlook_callback=true">click here</a> to return to the application.</p>
+                    </div>
+                `;
+            }}
+        }}, 5000);
+    </script>
+</body>
+</html>
+        """
+        
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=callback_html)
 
     except Exception as e:
         logger.error(f"OAuth callback error: {str(e)}")
-        # Redirect to frontend with error
-        return RedirectResponse(url="http://localhost:3000/settings?outlook_error=true")
+        # Return error page
+        error_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authorization Error</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }}
+        .container {{
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        .error {{
+            color: #e74c3c;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="error">Authorization Error</h2>
+        <p>There was an error during authorization. Please close this window and try again.</p>
+        <p><a href="{os.getenv("FRONTEND_URL", "http://localhost:3000")}/settings?outlook_error=true">Return to Settings</a></p>
+    </div>
+    
+    <script>
+        try {{
+            if (window.opener) {{
+                window.opener.postMessage({{
+                    type: 'oauth_error',
+                    error: 'Authorization failed'
+                }}, window.opener.location.origin);
+            }}
+        }} catch (e) {{
+            console.log('Could not communicate with parent window:', e);
+        }}
+        
+        setTimeout(() => {{
+            try {{
+                window.close();
+            }} catch (e) {{
+                // Can't close window
+            }}
+        }}, 3000);
+    </script>
+</body>
+</html>
+        """
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=error_html)
 
 
 def update_sync_progress(user_id: int, status: str, current_step: str = "", total_steps: int = 0, completed_steps: int = 0):

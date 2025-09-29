@@ -39,7 +39,7 @@ jobs:
           DATABASE_URL: "postgresql://test:test@localhost:5432/test"
           OUTLOOK_CLIENT_ID: "test-client-id"
           OUTLOOK_TENANT_ID: "consumers"
-          OUTLOOK_REDIRECT_URI: "https://login.microsoftonline.com/common/oauth2/nativeclient"
+          # OUTLOOK_REDIRECT_URI is now dynamically set based on tenant
         run: |
           echo 'Checking Python syntax and imports...'
           python -m py_compile backend/app/main.py
