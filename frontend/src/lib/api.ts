@@ -81,6 +81,7 @@ export const transactionApi = {
 export const outlookApi = {
   getAuthUrl: () => api.get('/outlook/auth-url'),
   getStatus: () => api.get('/outlook/status'),
+  pollAuth: () => api.post('/outlook/auth-poll'),
   exchangeCode: (code: string, state: string) => api.post('/outlook/exchange-code', { code, state }),
   sync: () => api.post('/outlook/sync'),
   getSyncProgress: () => api.get('/outlook/sync-progress'),
