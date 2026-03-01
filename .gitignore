@@ -214,3 +214,4 @@ secrets.yml
 credentials.json
 .secrets/
 .credentials/
+frontend/tsconfig.tsbuildinfo
