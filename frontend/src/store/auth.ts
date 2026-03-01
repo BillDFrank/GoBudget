@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 interface User {
   id: number;
   username: string;
+  email?: string;
 }
 
 interface AuthState {
@@ -11,7 +12,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string, email: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
 }
@@ -64,7 +65,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (username: string, password: string) => {
+      register: async (username: string, password: string, email: string) => {
         set({ isLoading: true });
         try {
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/auth/register`, {
@@ -72,16 +73,20 @@ export const useAuthStore = create<AuthState>()(
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ username, password }),
+            body: JSON.stringify({ username, password, email }),
             credentials: 'include',
           });
 
           if (!response.ok) {
-            throw new Error('Registration failed');
+            const errorData = await response.json().catch(() => ({}));
+            const err = new Error(errorData.detail || 'Registration failed') as any;
+            err.status = response.status;
+            throw err;
           }
 
-          const user = await response.json();
-          set({ user, isAuthenticated: true });
+          const data = await response.json();
+          localStorage.setItem('access_token', data.access_token);
+          set({ user: data.user, isAuthenticated: true });
         } catch (error) {
           throw error;
         } finally {
