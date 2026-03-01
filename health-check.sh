@@ -19,7 +19,7 @@ sleep 5
 
 # Check backend health
 echo "🔧 Checking backend API..."
-if curl -f -s http://localhost:8000/ > /dev/null; then
+if curl -f -s http://localhost:8001/ > /dev/null; then
     echo "✅ Backend API is responding"
 else
     echo "❌ Backend API is not responding"
@@ -28,7 +28,7 @@ fi
 
 # Check frontend health
 echo "🌐 Checking frontend..."
-if curl -f -s http://localhost:3000/ > /dev/null; then
+if curl -f -s http://localhost:3001/ > /dev/null; then
     echo "✅ Frontend is responding"
 else
     echo "❌ Frontend is not responding"
