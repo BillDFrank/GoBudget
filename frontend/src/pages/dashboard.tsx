@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../layout/AdminLayout';
 import { dashboardApi } from '../lib/api';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { TrendingUp, TrendingDown, BarChart2, Wallet, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface DashboardKPIs {
   income: number;
@@ -217,218 +227,167 @@ export default function Dashboard() {
         </div>
 
         {/* Month Selection */}
-        <div className="card mb-6">
-          <div className="card-content">
+        <Card className="mb-6">
+          <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">Financial Overview</h3>
-                <p className="text-sm text-gray-600">
+                <h3 className="text-lg font-semibold mb-1">Financial Overview</h3>
+                <p className="text-sm text-muted-foreground">
                   {dashboardData ? getMonthName(dashboardData.month, dashboardData.year) : 'Loading...'}
                 </p>
               </div>
               
-              {/* Custom Month/Year Navigator */}
+              {/* Month/Year Navigator */}
               <div className="flex items-center gap-3 relative">
-                <div className="flex items-center bg-gray-50 rounded-lg p-1">
-                  {/* Previous Month Button */}
-                  <button
-                    onClick={goToPreviousMonth}
-                    className="p-2 hover:bg-white rounded-md transition-colors text-gray-600 hover:text-gray-900"
-                    title="Previous Month"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
+                <div className="flex items-center bg-muted rounded-lg p-1">
+                  <Button variant="ghost" size="icon" onClick={goToPreviousMonth} title="Previous Month">
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
                   
-                  {/* Current Month/Year Display - Clickable */}
-                  <button
+                  <Button
+                    variant="outline"
                     onClick={toggleMonthPicker}
-                    className="px-4 py-2 bg-white rounded-md shadow-sm border min-w-[140px] text-center hover:bg-gray-50 transition-colors group"
+                    className="min-w-[140px] bg-background"
                     title="Click to select month"
                   >
-                    <div className="font-medium text-gray-900 flex items-center justify-center gap-1">
-                      {getShortMonthName(selectedMonth)} {selectedYear}
-                      <svg 
-                        className={`w-3 h-3 text-gray-500 transition-transform ${showMonthPicker ? 'rotate-180' : ''}`} 
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </button>
+                    {getShortMonthName(selectedMonth)} {selectedYear}
+                    <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${showMonthPicker ? 'rotate-180' : ''}`} />
+                  </Button>
                   
-                  {/* Next Month Button */}
-                  <button
-                    onClick={goToNextMonth}
-                    className="p-2 hover:bg-white rounded-md transition-colors text-gray-600 hover:text-gray-900"
-                    title="Next Month"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
+                  <Button variant="ghost" size="icon" onClick={goToNextMonth} title="Next Month">
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
                 </div>
 
                 {/* Month Picker Dropdown */}
                 {showMonthPicker && (
                   <>
-                    {/* Backdrop */}
-                    <div 
-                      className="fixed inset-0 z-10" 
-                      onClick={() => setShowMonthPicker(false)}
-                    />
-                    
-                    {/* Dropdown */}
-                    <div className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-4 min-w-[320px]">
+                    <div className="fixed inset-0 z-10" onClick={() => setShowMonthPicker(false)} />
+                    <div className="absolute top-full mt-2 right-0 bg-background border rounded-lg shadow-lg z-20 p-4 min-w-[320px]">
                       <div className="mb-3">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Select Year</label>
-                        <select
-                          value={selectedYear}
-                          onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        <label className="block text-sm font-medium mb-2">Select Year</label>
+                        <Select
+                          value={String(selectedYear)}
+                          onValueChange={(v) => setSelectedYear(parseInt(v))}
                         >
-                          {availableYears.map(year => (
-                            <option key={year} value={year}>{year}</option>
-                          ))}
-                        </select>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableYears.map(year => (
+                              <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Select Month</label>
+                        <label className="block text-sm font-medium mb-2">Select Month</label>
                         <div className="grid grid-cols-3 gap-2">
                           {monthNames.map((monthName, index) => (
-                            <button
+                            <Button
                               key={index}
+                              variant={selectedMonth === index + 1 ? 'default' : 'ghost'}
+                              size="sm"
                               onClick={() => selectMonth(index + 1, selectedYear)}
-                              className={`px-3 py-2 text-sm rounded-md transition-colors ${
-                                selectedMonth === index + 1 
-                                  ? 'bg-green-100 text-green-800 border border-green-300' 
-                                  : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                              }`}
                             >
                               {monthName.substring(0, 3)}
-                            </button>
+                            </Button>
                           ))}
                         </div>
                       </div>
-                      
-                      <div className="mt-3 pt-3 border-t border-gray-200 flex justify-end">
-                        <button
-                          onClick={() => setShowMonthPicker(false)}
-                          className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
-                        >
+                      <div className="mt-3 pt-3 border-t flex justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => setShowMonthPicker(false)}>
                           Close
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </>
                 )}
                 
-                {/* Current Month Button */}
-                <button
-                  onClick={goToCurrentMonth}
-                  className="px-3 py-2 text-sm font-medium text-green-600 bg-green-50 border border-green-200 rounded-md hover:bg-green-100 transition-colors"
-                  title="Go to Current Month"
-                >
+                <Button variant="outline" size="sm" onClick={goToCurrentMonth} title="Go to Current Month">
                   Today
-                </button>
+                </Button>
               </div>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {dashboardData && (
           <>
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {/* Income Card */}
-              <div className="card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">
-                      Income
-                    </p>
-                    <p className="text-2xl font-bold text-green-600">
-                      {formatCurrency(dashboardData.kpis.income)}
-                    </p>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Income</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {formatCurrency(dashboardData.kpis.income)}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6 text-green-600" />
+                    </div>
                   </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              {/* Expenses Card */}
-              <div className="card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">
-                      Expenses
-                    </p>
-                    <p className="text-2xl font-bold text-red-600">
-                      {formatCurrency(dashboardData.kpis.expenses)}
-                    </p>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Expenses</p>
+                      <p className="text-2xl font-bold text-red-600">
+                        {formatCurrency(dashboardData.kpis.expenses)}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                      <TrendingDown className="w-6 h-6 text-red-600" />
+                    </div>
                   </div>
-                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              {/* Invested Card */}
-              <div className="card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">
-                      Invested
-                    </p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {formatCurrency(dashboardData.kpis.investments)}
-                    </p>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Invested</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {formatCurrency(dashboardData.kpis.investments)}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <BarChart2 className="w-6 h-6 text-blue-600" />
+                    </div>
                   </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              {/* Saved Card */}
-              <div className="card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">
-                      Saved
-                    </p>
-                    <p className="text-2xl font-bold text-purple-600">
-                      {formatCurrency(dashboardData.kpis.savings)}
-                    </p>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Saved</p>
+                      <p className="text-2xl font-bold text-purple-600">
+                        {formatCurrency(dashboardData.kpis.savings)}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <Wallet className="w-6 h-6 text-purple-600" />
+                    </div>
                   </div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Income by Description Chart */}
-              <div className="card">
-                <div className="card-header">
-                  <h2 className="card-title">Income by Description</h2>
-                </div>
-                <div className="card-content">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Income by Description</CardTitle>
+                </CardHeader>
+                <CardContent>
                   {dashboardData.charts.income_by_description.length > 0 ? (
                     <div style={{ width: '100%', height: '400px' }}>
                       <ResponsiveContainer>
@@ -457,18 +416,17 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <div className="text-center py-8">
-                      <p className="text-gray-500">No income data for this month</p>
+                      <p className="text-muted-foreground">No income data for this month</p>
                     </div>
                   )}
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              {/* Expenses by Category Chart */}
-              <div className="card">
-                <div className="card-header">
-                  <h2 className="card-title">Expenses by Category</h2>
-                </div>
-                <div className="card-content">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Expenses by Category</CardTitle>
+                </CardHeader>
+                <CardContent>
                   {dashboardData.charts.expenses_by_category.length > 0 ? (
                     <div style={{ width: '100%', height: '400px' }}>
                       <ResponsiveContainer>
@@ -497,11 +455,11 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <div className="text-center py-8">
-                      <p className="text-gray-500">No expense data for this month</p>
+                      <p className="text-muted-foreground">No expense data for this month</p>
                     </div>
                   )}
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             </div>
           </>
         )}

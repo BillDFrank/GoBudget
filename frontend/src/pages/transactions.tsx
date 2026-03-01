@@ -1,7 +1,32 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Filter } from 'lucide-react';
 import { FilterPanel, SortableHeader, type FilterDef, type SortConfig } from '../components/Filters';
 import AdminLayout from '../layout/AdminLayout';
 import { transactionApi, categoriesApi, personsApi } from '../lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 // Transaction types (these remain static)
 const DEFAULT_TRANSACTION_TYPES = ['Income', 'Expense', 'Investment', 'Savings'];
 
@@ -80,147 +105,127 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button 
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
-            aria-label="Close modal"
-          >
-            ✕
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isSubmitting) onClose(); }}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-              Date
-            </label>
-            <input
+          <div className="space-y-1">
+            <Label htmlFor="date">Date</Label>
+            <Input
               id="date"
               type="date"
               value={formData.date}
               onChange={(e) => updateFormData('date', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
               required
             />
           </div>
 
-          <div>
-            <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
-              Type
-            </label>
-            <select
-              id="type"
+          <div className="space-y-1">
+            <Label htmlFor="type">Type</Label>
+            <Select
               value={formData.type}
-              onChange={(e) => updateFormData('type', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              onValueChange={(value) => updateFormData('type', value)}
               required
             >
-              <option value="">Select Type</option>
-              {DEFAULT_TRANSACTION_TYPES.map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
+              <SelectTrigger id="type">
+                <SelectValue placeholder="Select Type" />
+              </SelectTrigger>
+              <SelectContent>
+                {DEFAULT_TRANSACTION_TYPES.map(type => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div>
-            <label htmlFor="person" className="block text-sm font-medium text-gray-700 mb-1">
-              Person/Entity
-            </label>
-            <select
-              id="person"
+          <div className="space-y-1">
+            <Label htmlFor="person">Person/Entity</Label>
+            <Select
               value={formData.person}
-              onChange={(e) => updateFormData('person', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              onValueChange={(value) => updateFormData('person', value)}
               required
             >
-              <option value="">Select Person</option>
-              {persons.map(person => (
-                <option key={typeof person === 'string' ? person : person.id} value={typeof person === 'string' ? person : person.name}>
-                  {typeof person === 'string' ? person : person.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="person">
+                <SelectValue placeholder="Select Person" />
+              </SelectTrigger>
+              <SelectContent>
+                {persons.map(person => (
+                  <SelectItem key={typeof person === 'string' ? person : person.id} value={typeof person === 'string' ? person : person.name}>
+                    {typeof person === 'string' ? person : person.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div>
-            <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
-              Category
-            </label>
-            <select
-              id="category"
+          <div className="space-y-1">
+            <Label htmlFor="category">Category</Label>
+            <Select
               value={formData.category}
-              onChange={(e) => updateFormData('category', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              onValueChange={(value) => updateFormData('category', value)}
               required
             >
-              <option value="">Select Category</option>
-              {categories.map(category => (
-                <option key={typeof category === 'string' ? category : category.id} value={typeof category === 'string' ? category : category.name}>
-                  {typeof category === 'string' ? category : category.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="category">
+                <SelectValue placeholder="Select Category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map(category => (
+                  <SelectItem key={typeof category === 'string' ? category : category.id} value={typeof category === 'string' ? category : category.name}>
+                    {typeof category === 'string' ? category : category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <input
+          <div className="space-y-1">
+            <Label htmlFor="description">Description</Label>
+            <Input
               id="description"
               type="text"
               value={formData.description}
               onChange={(e) => updateFormData('description', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
               placeholder="Enter description"
               required
             />
           </div>
 
-          <div>
-            <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
-              Amount
-            </label>
-            <input
+          <div className="space-y-1">
+            <Label htmlFor="amount">Amount</Label>
+            <Input
               id="amount"
               type="number"
               step="0.01"
               value={formData.amount}
               onChange={(e) => updateFormData('amount', parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
               placeholder="Enter amount (negative for expenses)"
               required
             />
           </div>
 
           <div className="flex justify-end space-x-3 pt-4">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Saving...' : (initialData ? 'Update' : 'Create')}
-            </button>
+            </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -365,25 +370,15 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isUploading) handleClose(); }}>
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
             {step === 'upload' ? 'Import Transactions from CSV' : 'Review Transactions'}
-          </h3>
-          <button 
-            onClick={handleClose}
-            disabled={isUploading}
-            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
-            aria-label="Close modal"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
-        <div className="p-6">
+        <div>
           {step === 'upload' && (
             <div className="space-y-4">
               {/* Instructions */}
@@ -392,7 +387,7 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
                 <ul className="text-sm text-blue-800 space-y-1">
                   <li>• <strong>date</strong>: Date in YYYY-MM-DD format (required)</li>
                   <li>• <strong>type</strong>: Income, Expense, Investment, or Savings (required)</li>
-                  <li>• <strong>person</strong>: Person/entity name (optional, defaults to "Family")</li>
+                  <li>• <strong>person</strong>: Person/entity name (optional, defaults to &quot;Family&quot;)</li>
                   <li>• <strong>category</strong>: Transaction category (required)</li>
                   <li>• <strong>description</strong>: Transaction description (required)</li>
                   <li>• <strong>amount</strong>: Transaction amount - positive for income, negative for expenses (required)</li>
@@ -404,30 +399,24 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
 
               {/* Sample CSV download */}
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Need a template?</span>
-                <button
-                  onClick={downloadSampleCsv}
-                  className="text-blue-600 hover:text-blue-800 text-sm underline"
-                >
+                <span className="text-sm text-muted-foreground">Need a template?</span>
+                <Button variant="link" size="sm" onClick={downloadSampleCsv}>
                   Download Sample CSV
-                </button>
+                </Button>
               </div>
 
               {/* File upload */}
-              <div>
-                <label htmlFor="csv-file" className="block text-sm font-medium text-gray-700 mb-2">
-                  Select CSV File
-                </label>
-                <input
+              <div className="space-y-1">
+                <Label htmlFor="csv-file">Select CSV File</Label>
+                <Input
                   id="csv-file"
                   type="file"
                   accept=".csv"
                   onChange={handleFileChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   disabled={isUploading}
                 />
                 {file && (
-                  <p className="text-sm text-gray-600 mt-1">Selected: {file.name}</p>
+                  <p className="text-sm text-muted-foreground">Selected: {file.name}</p>
                 )}
               </div>
 
@@ -459,23 +448,14 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
               )}
 
               {/* Action buttons */}
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  disabled={isUploading}
-                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="outline" onClick={handleClose} disabled={isUploading}>
                   {uploadResult ? 'Close' : 'Cancel'}
-                </button>
+                </Button>
                 {!uploadResult && (
-                  <button
-                    onClick={handlePreview}
-                    disabled={!file || isUploading}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+                  <Button onClick={handlePreview} disabled={!file || isUploading}>
                     {isUploading ? 'Processing...' : 'Preview Transactions'}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -494,92 +474,65 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
               </div>
 
               {/* Transactions Table */}
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                <table className="w-full text-sm text-left text-gray-500">
-                  <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-4 py-3">Date</th>
-                      <th scope="col" className="px-4 py-3">Type</th>
-                      <th scope="col" className="px-4 py-3">Person</th>
-                      <th scope="col" className="px-4 py-3">Category</th>
-                      <th scope="col" className="px-4 py-3">Description</th>
-                      <th scope="col" className="px-4 py-3">Amount</th>
-                      <th scope="col" className="px-4 py-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewTransactions.map((transaction) => (
-                      <tr key={transaction.tempId} className="bg-white border-b hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          {transaction.date}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="capitalize">{transaction.type}</span>
-                        </td>
-                        <td className="px-4 py-3">{transaction.person}</td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-medium px-2.5 py-0.5 rounded bg-blue-100 text-blue-800">
-                            {transaction.category}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 max-w-xs truncate" title={transaction.description}>
-                          {transaction.description}
-                        </td>
-                        <td className={`px-4 py-3 font-medium ${parseFloat(transaction.amount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {parseFloat(transaction.amount) >= 0 ? '+' : ''}${Math.abs(parseFloat(transaction.amount)).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex space-x-2">
-                            <button 
-                              onClick={() => handleEditTransaction(transaction)}
-                              className="text-blue-600 hover:text-blue-900 transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <button 
-                              onClick={() => handleRemoveTransaction(transaction.tempId)}
-                              className="text-red-600 hover:text-red-900 transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Person</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {previewTransactions.map((transaction) => (
+                    <TableRow key={transaction.tempId}>
+                      <TableCell className="font-medium">{transaction.date}</TableCell>
+                      <TableCell><span className="capitalize">{transaction.type}</span></TableCell>
+                      <TableCell>{transaction.person}</TableCell>
+                      <TableCell>
+                        <span className="text-xs font-medium px-2.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                          {transaction.category}
+                        </span>
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate" title={transaction.description}>
+                        {transaction.description}
+                      </TableCell>
+                      <TableCell className={parseFloat(transaction.amount) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {parseFloat(transaction.amount) >= 0 ? '+' : ''}${Math.abs(parseFloat(transaction.amount)).toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => handleEditTransaction(transaction)}>Edit</Button>
+                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleRemoveTransaction(transaction.tempId)}>Remove</Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
               {previewTransactions.length === 0 && (
                 <div className="text-center py-8">
-                  <p className="text-gray-500">No transactions to import. Please go back and select a different file.</p>
+                  <p className="text-muted-foreground">No transactions to import. Please go back and select a different file.</p>
                 </div>
               )}
 
               {/* Action buttons */}
               <div className="flex justify-between pt-4">
-                <button
-                  onClick={() => setStep('upload')}
-                  disabled={isUploading}
-                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
+                <Button variant="outline" onClick={() => setStep('upload')} disabled={isUploading}>
                   Back to Upload
-                </button>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={handleClose}
-                    disabled={isUploading}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
+                </Button>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={handleClose} disabled={isUploading}>Cancel</Button>
+                  <Button
                     onClick={handleConfirmImport}
                     disabled={previewTransactions.length === 0 || isUploading}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isUploading ? 'Importing...' : `Import ${previewTransactions.length} Transaction${previewTransactions.length !== 1 ? 's' : ''}`}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -587,112 +540,91 @@ const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onImpo
         </div>
 
         {/* Edit Transaction Modal */}
-        {editingTransaction && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-60">
-            <div className="bg-white rounded-lg max-w-md w-full">
-              <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                <h4 className="text-lg font-semibold text-gray-900">Edit Transaction</h4>
-                <button
-                  onClick={() => setEditingTransaction(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input
+        <Dialog open={!!editingTransaction} onOpenChange={(open) => { if (!open) setEditingTransaction(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Transaction</DialogTitle>
+            </DialogHeader>
+            {editingTransaction && (
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <Label>Date</Label>
+                  <Input
                     type="date"
                     value={editingTransaction.date}
                     onChange={(e) => setEditingTransaction({...editingTransaction, date: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <select
+                <div className="space-y-1">
+                  <Label>Type</Label>
+                  <Select
                     value={editingTransaction.type}
-                    onChange={(e) => setEditingTransaction({...editingTransaction, type: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    onValueChange={(value) => setEditingTransaction({...editingTransaction, type: value})}
                   >
-                    <option value="Income">Income</option>
-                    <option value="Expense">Expense</option>
-                    <option value="Investment">Investment</option>
-                    <option value="Savings">Savings</option>
-                  </select>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Income">Income</SelectItem>
+                      <SelectItem value="Expense">Expense</SelectItem>
+                      <SelectItem value="Investment">Investment</SelectItem>
+                      <SelectItem value="Savings">Savings</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Person</label>
-                  <input
+                <div className="space-y-1">
+                  <Label>Person</Label>
+                  <Input
                     type="text"
                     value={editingTransaction.person}
                     onChange={(e) => setEditingTransaction({...editingTransaction, person: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <select
+                <div className="space-y-1">
+                  <Label>Category</Label>
+                  <Select
                     value={editingTransaction.category}
-                    onChange={(e) => setEditingTransaction({...editingTransaction, category: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    onValueChange={(value) => setEditingTransaction({...editingTransaction, category: value})}
                   >
-                    {categories.map(category => (
-                      <option key={typeof category === 'string' ? category : category.id} value={typeof category === 'string' ? category : category.name}>
-                        {typeof category === 'string' ? category : category.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map(category => (
+                        <SelectItem key={typeof category === 'string' ? category : category.id} value={typeof category === 'string' ? category : category.name}>
+                          {typeof category === 'string' ? category : category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <input
+                <div className="space-y-1">
+                  <Label>Description</Label>
+                  <Input
                     type="text"
                     value={editingTransaction.description}
                     onChange={(e) => setEditingTransaction({...editingTransaction, description: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                  <input
+                <div className="space-y-1">
+                  <Label>Amount</Label>
+                  <Input
                     type="number"
                     step="0.01"
                     value={editingTransaction.amount}
                     onChange={(e) => setEditingTransaction({...editingTransaction, amount: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    onClick={() => setEditingTransaction(null)}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveEdit}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    Save Changes
-                  </button>
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button variant="outline" onClick={() => setEditingTransaction(null)}>Cancel</Button>
+                  <Button onClick={handleSaveEdit}>Save Changes</Button>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -1129,38 +1061,27 @@ export default function Transactions() {
           </div>
           <div className="card-content">
             {/* Action Bar */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 bg-muted/50 border-b">
               <div className="flex items-center gap-4">
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-muted-foreground">
                   {filteredTransactions.length} transactions total • {paginationData?.items?.length || 0} on this page
                 </div>
-                <button
+                <Button
+                  variant={showFilters ? 'default' : 'outline'}
+                  size="sm"
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`px-3 py-1 text-sm rounded-lg transition-colors flex items-center gap-2 ${
-                    showFilters 
-                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-.553.894l-2 1A1 1 0 0110 20v-5.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                  </svg>
+                  <Filter className="w-4 h-4" />
                   Filters
-                </button>
+                </Button>
               </div>
-              <div className="flex space-x-3">
-                <button 
-                  onClick={() => setShowCsvImportModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setShowCsvImportModal(true)}>
                   Import CSV
-                </button>
-                <button 
-                  onClick={() => setShowCreateModal(true)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
+                </Button>
+                <Button onClick={() => setShowCreateModal(true)}>
                   Add Transaction
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -1179,12 +1100,14 @@ export default function Transactions() {
             {error && (
               <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-red-800">{error}</p>
-                <button 
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="mt-2 text-red-600 hover:text-red-800 p-0 h-auto"
                   onClick={() => setError(null)}
-                  className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
                 >
                   Dismiss
-                </button>
+                </Button>
               </div>
             )}
 
@@ -1192,126 +1115,123 @@ export default function Transactions() {
             {loading ? (
               <div className="flex justify-center items-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-                <span className="ml-2 text-gray-600">Loading transactions...</span>
+                <span className="ml-2 text-muted-foreground">Loading transactions...</span>
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
-                  <table className="w-full text-sm text-left text-gray-500">
-                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                      <tr>
-                        <th scope="col" className="px-6 py-3">
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>
                           <SortableHeader field="date" label="Date" sortConfig={sortConfig} onSort={handleSort} />
-                        </th>
-                        <th scope="col" className="px-6 py-3">
+                        </TableHead>
+                        <TableHead>
                           <SortableHeader field="type" label="Type" sortConfig={sortConfig} onSort={handleSort} />
-                        </th>
-                        <th scope="col" className="px-6 py-3 hidden sm:table-cell">
+                        </TableHead>
+                        <TableHead className="hidden sm:table-cell">
                           <SortableHeader field="person" label="Person" sortConfig={sortConfig} onSort={handleSort} />
-                        </th>
-                        <th scope="col" className="px-6 py-3">
+                        </TableHead>
+                        <TableHead>
                           <SortableHeader field="category" label="Category" sortConfig={sortConfig} onSort={handleSort} />
-                        </th>
-                        <th scope="col" className="px-6 py-3 max-w-xs">
+                        </TableHead>
+                        <TableHead className="max-w-xs">
                           <SortableHeader field="description" label="Description" sortConfig={sortConfig} onSort={handleSort} />
-                        </th>
-                        <th scope="col" className="px-6 py-3">
+                        </TableHead>
+                        <TableHead>
                           <SortableHeader field="amount" label="Amount" sortConfig={sortConfig} onSort={handleSort} />
-                        </th>
-                        <th scope="col" className="px-6 py-3">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                        </TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {paginationData?.total === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                        <TableRow>
+                          <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
                             {Object.values(filterConfig).some(v => v !== '') 
                               ? 'No transactions match your filters' 
                               : 'No transactions found'
                             }
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ) : (
                         paginationData?.items?.map((transaction) => (
-                          <tr key={transaction.id} className="bg-white border-b hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 font-medium text-gray-900">
+                          <TableRow key={transaction.id}>
+                            <TableCell className="font-medium">
                               {new Date(transaction.date).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4">
+                            </TableCell>
+                            <TableCell>
                               <span className="capitalize">{transaction.type}</span>
-                            </td>
-                            <td className="px-6 py-4 hidden sm:table-cell">{transaction.person}</td>
-                            <td className="px-6 py-4">
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell">{transaction.person}</TableCell>
+                            <TableCell>
                               <span className={`text-xs font-medium px-2.5 py-0.5 rounded ${getCategoryBadgeColor(transaction.category)}`}>
                                 {transaction.category}
                               </span>
-                            </td>
-                            <td className="px-6 py-4 max-w-xs truncate" title={transaction.description}>
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate" title={transaction.description}>
                               {transaction.description}
-                            </td>
-                            <td className={`px-6 py-4 font-medium ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            </TableCell>
+                            <TableCell className={transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
                               {transaction.amount >= 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex space-x-2">
-                                <button 
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   onClick={() => setEditingTransaction(transaction)}
-                                  className="text-blue-600 hover:text-blue-900 transition-colors"
                                   aria-label={`Edit transaction ${transaction.description}`}
                                 >
                                   Edit
-                                </button>
-                                <button 
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
                                   onClick={() => handleDeleteTransaction(transaction.id)}
-                                  className="text-red-600 hover:text-red-900 transition-colors"
                                   aria-label={`Delete transaction ${transaction.description}`}
                                 >
                                   Delete
-                                </button>
+                                </Button>
                               </div>
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))
                       )}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
                 {renderPagination()}
               </>
             )}
 
             {/* Modals */}
-            {showCreateModal && (
-              <TransactionModal
-                isOpen={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
-                onSubmit={handleCreateTransaction}
-                title="Create New Transaction"
-                categories={categories}
-                persons={persons}
-              />
-            )}
+            <TransactionModal
+              isOpen={showCreateModal}
+              onClose={() => setShowCreateModal(false)}
+              onSubmit={handleCreateTransaction}
+              title="Create New Transaction"
+              categories={categories}
+              persons={persons}
+            />
 
-            {showCsvImportModal && (
-              <CsvImportModal
-                isOpen={showCsvImportModal}
-                onClose={() => setShowCsvImportModal(false)}
-                onImportSuccess={handleCsvImportSuccess}
-                categories={categories}
-              />
-            )}
+            <CsvImportModal
+              isOpen={showCsvImportModal}
+              onClose={() => setShowCsvImportModal(false)}
+              onImportSuccess={handleCsvImportSuccess}
+              categories={categories}
+            />
 
-            {editingTransaction && (
-              <TransactionModal
-                isOpen={!!editingTransaction}
-                onClose={() => setEditingTransaction(null)}
-                onSubmit={(data) => handleUpdateTransaction(editingTransaction.id, data)}
-                title="Edit Transaction"
-                initialData={editingTransaction}
-                categories={categories}
-                persons={persons}
-              />
-            )}
+            <TransactionModal
+              isOpen={!!editingTransaction}
+              onClose={() => setEditingTransaction(null)}
+              onSubmit={(data) => handleUpdateTransaction(editingTransaction!.id, data)}
+              title="Edit Transaction"
+              initialData={editingTransaction ?? undefined}
+              categories={categories}
+              persons={persons}
+            />
           </div>
         </div>
       </div>

@@ -4,18 +4,18 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useSidebar } from "../context/SidebarContext";
 import {
-  GridIcon,
-  CreditCardIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
-  PiggyBankIcon,
-  ChartBarIcon,
-  ShoppingCartIcon,
-  ChevronDownIcon,
-  UserCircleIcon,
-  CogIcon,
-  LogoutIcon,
-} from "../icons/index";
+  LayoutDashboard,
+  CreditCard,
+  TrendingUp,
+  TrendingDown,
+  PiggyBank,
+  BarChart2,
+  ShoppingCart,
+  ChevronDown,
+  UserCircle,
+  Settings,
+  LogOut,
+} from "lucide-react";
 import { useAuthStore } from "../store/auth";
 
 type NavItem = {
@@ -27,37 +27,37 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   {
-    icon: <GridIcon />,
+    icon: <LayoutDashboard size={20} />,
     name: "Dashboard",
     path: "/dashboard",
   },
   {
-    icon: <CreditCardIcon />,
+    icon: <CreditCard size={20} />,
     name: "Transactions",
     path: "/transactions",
   },
   {
-    icon: <TrendingUpIcon />,
+    icon: <TrendingUp size={20} />,
     name: "Income",
     path: "/income",
   },
   {
-    icon: <TrendingDownIcon />,
+    icon: <TrendingDown size={20} />,
     name: "Expenses",
     path: "/expenses",
   },
   {
-    icon: <PiggyBankIcon />,
+    icon: <PiggyBank size={20} />,
     name: "Savings",
     path: "/savings",
   },
   {
-    icon: <ChartBarIcon />,
+    icon: <BarChart2 size={20} />,
     name: "Investments",
     path: "/investments",
   },
   {
-    icon: <ShoppingCartIcon />,
+    icon: <ShoppingCart size={20} />,
     name: "Supermarket",
     path: "/supermarket",
   },
@@ -65,12 +65,12 @@ const navItems: NavItem[] = [
 
 const profileItems: NavItem[] = [
   {
-    icon: <UserCircleIcon />,
+    icon: <UserCircle size={20} />,
     name: "Profile",
     path: "/profile",
   },
   {
-    icon: <CogIcon />,
+    icon: <Settings size={20} />,
     name: "Settings",
     path: "/settings",
   },
@@ -149,7 +149,7 @@ const AppSidebar: React.FC = () => {
                 <span className={`menu-item-text`}>{nav.name}</span>
               )}
               {(isExpanded || isHovered || isMobileOpen) && (
-                <ChevronDownIcon
+                <ChevronDown
                   className={`ml-auto w-5 h-5 transition-transform duration-200  ${
                     openSubmenu?.type === menuType &&
                     openSubmenu?.index === index
@@ -295,7 +295,7 @@ const AppSidebar: React.FC = () => {
               className="menu-item group menu-item-inactive w-full"
             >
               <span className="menu-item-icon-inactive">
-                <LogoutIcon />
+                <LogOut size={20} />
               </span>
               {(isExpanded || isHovered || isMobileOpen) && (
                 <span className="menu-item-text">Logout</span>
