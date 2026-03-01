@@ -11,6 +11,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
+    email = Column(String, nullable=True)
     hashed_password = Column(String)
     outlook_access_token = Column(String, nullable=True)
     outlook_refresh_token = Column(String, nullable=True)

@@ -113,7 +113,7 @@ def get_current_user(token: str = Depends(oauth2_scheme),
     return user
 
 
-@router.post("/register", response_model=User)
+@router.post("/register")
 def register(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(UserModel).filter(
         UserModel.username == user.username).first()
@@ -122,6 +122,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
             status_code=400, detail="Username already registered")
     hashed_password = get_password_hash(user.password)
     db_user = UserModel(username=user.username,
+                        email=user.email,
                         hashed_password=hashed_password)
     db.add(db_user)
     db.commit()
@@ -130,7 +131,13 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     # Create default categories and persons for the new user
     create_default_user_data(db, db_user.id)
 
-    return db_user
+    # Automatically generate access token so the client is logged in
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": db_user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer",
+            "user": User.model_validate(db_user)}
 
 
 @router.post("/login")

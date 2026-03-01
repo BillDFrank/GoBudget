@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/auth';
 
 export default function Register() {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -26,10 +27,14 @@ export default function Register() {
     }
 
     try {
-      await register(username, password);
+      await register(username, password, email);
       router.push('/dashboard');
-    } catch (err) {
-      setError('Registration failed. Username may already exist.');
+    } catch (err: any) {
+      if (err?.status === 400) {
+        setError('Username already exists. Please choose a different username.');
+      } else {
+        setError('Registration failed. Please try again.');
+      }
     }
   };
 
@@ -66,6 +71,21 @@ export default function Register() {
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="email" className="sr-only">
+                Email address
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 focus:z-10 sm:text-sm"
+                placeholder="Email address (optional)"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div>

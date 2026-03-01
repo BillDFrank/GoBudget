@@ -9,10 +9,12 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    email: Optional[str] = None
 
 
 class User(UserBase):
     id: int
+    email: Optional[str] = None
 
     class Config:
         from_attributes = True
