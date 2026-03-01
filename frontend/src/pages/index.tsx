@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { DollarSign, BarChart2, Lock } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -37,7 +38,7 @@ export default function Home() {
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
             Track income, expenses, savings, and investments with intuitive dashboards and real-time insights.
-            Make informed financial decisions for your family's future.
+            Make informed financial decisions for your family&apos;s future.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
@@ -59,9 +60,7 @@ export default function Home() {
         <div className="mt-24 grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="text-center">
             <div className="bg-indigo-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-              </svg>
+              <DollarSign className="w-8 h-8 text-indigo-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">Track Everything</h3>
             <p className="text-gray-600">
@@ -71,9 +70,7 @@ export default function Home() {
 
           <div className="text-center">
             <div className="bg-green-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
+              <BarChart2 className="w-8 h-8 text-green-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">Visual Insights</h3>
             <p className="text-gray-600">
@@ -83,11 +80,9 @@ export default function Home() {
 
           <div className="text-center">
             <div className="bg-purple-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
+              <Lock className="w-8 h-8 text-purple-600" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Secure & Private</h3>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Secure &amp; Private</h3>
             <p className="text-gray-600">
               Your financial data is encrypted and secure. Access your information from anywhere safely.
             </p>

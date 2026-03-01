@@ -1,4 +1,15 @@
 import React from 'react';
+import { ChevronUp, ChevronsUpDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export type FilterType = 'text' | 'select' | 'date' | 'number';
 
@@ -26,68 +37,64 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   onApply,
 }) => {
   return (
-    <div className="p-4 bg-gray-50 border-b border-gray-200">
+    <div className="p-4 bg-muted/50 border-b">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {filters.map((filter) => (
-          <div key={filter.key}>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              {filter.label}
-            </label>
+          <div key={filter.key} className="space-y-1">
+            <Label htmlFor={`filter-${filter.key}`}>{filter.label}</Label>
             {filter.type === 'select' && (
-              <select
+              <Select
                 value={filterState[filter.key] || ''}
-                onChange={(e) => onFilterChange(filter.key, e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onValueChange={(value) => onFilterChange(filter.key, value === '__all__' ? '' : value)}
               >
-                <option value="">{`All ${filter.label}s`}</option>
-                {filter.options?.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
+                <SelectTrigger id={`filter-${filter.key}`}>
+                  <SelectValue placeholder={`All ${filter.label}s`} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{`All ${filter.label}s`}</SelectItem>
+                  {filter.options?.map((opt) => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {filter.type === 'text' && (
-              <input
+              <Input
+                id={`filter-${filter.key}`}
                 type="text"
                 value={filterState[filter.key] || ''}
                 onChange={(e) => onFilterChange(filter.key, e.target.value)}
                 placeholder={filter.placeholder}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             )}
             {filter.type === 'date' && (
-              <input
+              <Input
+                id={`filter-${filter.key}`}
                 type="date"
                 value={filterState[filter.key] || ''}
                 onChange={(e) => onFilterChange(filter.key, e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             )}
             {filter.type === 'number' && (
-              <input
+              <Input
+                id={`filter-${filter.key}`}
                 type="number"
                 step="0.01"
                 value={filterState[filter.key] || ''}
                 onChange={(e) => onFilterChange(filter.key, e.target.value)}
                 placeholder={filter.placeholder}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             )}
           </div>
         ))}
       </div>
       <div className="flex items-center justify-end gap-2 mt-4">
-        <button
-          onClick={onClear}
-          className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-        >
+        <Button variant="outline" size="sm" onClick={onClear}>
           Clear All
-        </button>
-        <button
-          onClick={onApply}
-          className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
+        </Button>
+        <Button size="sm" onClick={onApply}>
           Apply Filters
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -117,23 +124,15 @@ export const SortableHeader: React.FC<SortableHeaderProps> = ({
   return (
     <button
       onClick={() => onSort(field)}
-      className="flex items-center gap-1 hover:text-gray-900 transition-colors font-medium"
+      className="flex items-center gap-1 hover:text-foreground transition-colors font-medium"
     >
       {label}
-      {isActive && (
-        <svg 
-          className={`w-4 h-4 transition-transform ${direction === 'desc' ? 'rotate-180' : ''}`} 
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
-        </svg>
-      )}
-      {!isActive && (
-        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-        </svg>
+      {isActive ? (
+        <ChevronUp
+          className={`w-4 h-4 transition-transform ${direction === 'desc' ? 'rotate-180' : ''}`}
+        />
+      ) : (
+        <ChevronsUpDown className="w-4 h-4 text-muted-foreground" />
       )}
     </button>
   );
