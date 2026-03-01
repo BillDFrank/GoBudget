@@ -19,9 +19,27 @@ env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
 logger.info(f"Loading .env from: {env_path}")
 load_dotenv(dotenv_path=env_path)
 
+
+def _run_migrations(engine):
+    """Apply incremental schema changes to existing databases."""
+    from sqlalchemy import text, inspect
+    inspector = inspect(engine)
+    with engine.connect() as conn:
+        # Add email column to users table if it doesn't already exist
+        if 'email' not in [
+            col['name'] for col in inspector.get_columns('users')
+        ]:
+            conn.execute(
+                text("ALTER TABLE users ADD COLUMN email VARCHAR"))
+            conn.commit()
+            logger.info("Migration applied: added email column to users table")
+
+
 try:
     engine = init_database()
     models.Base.metadata.create_all(bind=engine)
+    # Run column migrations for tables that already exist
+    _run_migrations(engine)
 except Exception as e:
     print(f"Warning: Could not create database tables: {e}")
     print("Tables will be created when database becomes available")

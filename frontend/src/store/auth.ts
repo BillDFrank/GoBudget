@@ -12,7 +12,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string, email?: string) => Promise<void>;
+  register: (username: string, password: string, email: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
 }
@@ -65,7 +65,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (username: string, password: string, email?: string) => {
+      register: async (username: string, password: string, email: string) => {
         set({ isLoading: true });
         try {
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/auth/register`, {
